@@ -30,6 +30,7 @@ export const ADVERSARIAL_EXTRACTION_MATRIX = Object.freeze([
   'malformed-tree-protocol', 'incomplete-tree-protocol', 'tree-output-over-budget',
   'manifest-symlink', 'manifest-gitlink', 'manifest-binary-nul', 'manifest-invalid-utf8',
   'control-character-path', 'selected-control-exact', 'selected-control-wildcard',
+  'backslash-manifest-out-of-pattern', 'backslash-manifest-wildcard-selected',
   'invalid-path-shape', 'case-collision', 'unicode-nfc-collision',
   'unsupported-glob', 'missing-root-manifest', 'malformed-manifest', 'oversized-manifest',
   'zero-workspace-matches', 'duplicate-package-identity', 'more-than-five-groups',
@@ -456,6 +457,36 @@ test('selected tab and newline manifest paths produce the typed whole-project fa
       [`${root}/package.json`]: json({ name: 'selected-control' }),
     } });
     assertCoarse(fixture, ['station-fallback/path-unsupported']);
+    cover(name);
+  }
+});
+
+test('real-Git backslash manifests cannot evade complete accounting or produce partial detail', () => {
+  const rows = [
+    ['backslash-manifest-out-of-pattern', 'outside\\package.json', 2, 2],
+    ['backslash-manifest-wildcard-selected', 'packages/bad\\root/package.json', 3, 3],
+  ];
+  for (const [name, hostilePath, discoveredCount, selectedCount] of rows) {
+    const fixture = createGitFixture({ files: {
+      'package.json': json({ name: 'root', workspaces: ['packages/*'] }),
+      'packages/valid/package.json': json({ name: 'valid' }),
+      [hostilePath]: json({ name: 'hostile' }),
+    } });
+    const reader = createGitObjectReader({
+      repoRoot: fixture.root,
+      repositoryUrl: fixture.repositoryUrl,
+      revision: fixture.revision,
+    });
+    assert.equal(reader.inventory.length, 3, `${name}: incomplete inventory`);
+    assert.ok(reader.unsupportedPaths.some(({ code, path: candidate }) => (
+      code === 'station-extract/path-shape-unsupported' && candidate === hostilePath
+    )), `${name}: missing backslash classification`);
+
+    const published = assertCoarse(fixture, ['station-fallback/path-unsupported']);
+    assert.equal(published.evidence.analysis.discovered_manifest_count, discoveredCount, name);
+    assert.equal(published.evidence.analysis.selected_manifest_count, selectedCount, name);
+    assert.equal(published.evidence.analysis.represented_manifest_count, 0, name);
+    assert.equal(published.evidence.files.some(({ path: candidate }) => candidate === hostilePath), false, name);
     cover(name);
   }
 });

@@ -294,6 +294,62 @@ test('rejects a false coarse fallback for a valid detailed repository', async ()
   }, 'station-gate/unsupported-claim');
 });
 
+test('reader and independent gate force exact whole-project fallback for backslash manifest paths', async () => {
+  const { gateStationArtifacts } = await loadGate();
+  for (const [label, hostilePath, expectedDiscovered, expectedSelected] of [
+    ['out-of-pattern', 'outside\\package.json', 2, 2],
+    ['wildcard-selected', 'packages/bad\\root/package.json', 3, 3],
+  ]) {
+    const base = fixtureArtifacts({
+      'package.json': '{"name":"root","workspaces":["packages/*"]}\n',
+      'packages/valid/package.json': '{"name":"valid"}\n',
+      [hostilePath]: '{"name":"hostile"}\n',
+    });
+    const hostileIndex = base.reader.inventory.findIndex(({ path: candidate }) => candidate === hostilePath);
+    const hostileFact = base.reader.unsupportedPaths.find(({ entryIndex }) => entryIndex === hostileIndex);
+
+    assert.notEqual(hostileIndex, -1, `${label}: hostile path was silently omitted from inventory`);
+    assert.equal(base.reader.inventory.length, 3, `${label}: inventory is incomplete`);
+    assert.deepEqual(hostileFact, {
+      code: 'station-extract/path-shape-unsupported',
+      path: hostilePath,
+      pathBytesHex: Buffer.from(hostilePath).toString('hex'),
+      entryIndex: hostileIndex,
+    }, label);
+    assert.equal(base.evidence.value.analysis.detail_eligible, false, label);
+    assert.equal(base.evidence.value.analysis.discovered_manifest_count, expectedDiscovered, label);
+    assert.equal(base.evidence.value.analysis.selected_manifest_count, expectedSelected, label);
+    assert.equal(base.evidence.value.analysis.represented_manifest_count, 0, label);
+    assert.deepEqual(base.evidence.value.analysis.fallback_reason_codes, [
+      'station-fallback/path-unsupported',
+    ], label);
+    assert.deepEqual(base.evidence.value.packages, [], label);
+    assert.equal(base.map.value.snapshot.mode, 'coarse', label);
+    assert.deepEqual(base.map.value.fallback, {
+      used: true,
+      reason_codes: ['station-fallback/path-unsupported'],
+    }, label);
+    assert.equal(base.map.value.rooms.length, 1, label);
+    assert.deepEqual(base.map.value.relations, [], label);
+
+    const accepted = gateStationArtifacts(base.evidence.bytes, base.map.bytes, base.reader);
+    assert.deepEqual(accepted.evidence_bytes, base.evidence.bytes, `${label}: producer/gate evidence bytes differ`);
+    assert.deepEqual(accepted.map_bytes, base.map.bytes, `${label}: producer/gate map bytes differ`);
+    assert.equal(accepted.mode, 'coarse', label);
+    assert.deepEqual(accepted.fallback_reason_codes, ['station-fallback/path-unsupported'], label);
+
+    const readerWithOmittedFact = Object.freeze({
+      ...base.reader,
+      unsupportedPaths: Object.freeze(base.reader.unsupportedPaths.filter(({ entryIndex }) => entryIndex !== hostileIndex)),
+    });
+    assert.throws(
+      () => gateStationArtifacts(base.evidence.bytes, base.map.bytes, readerWithOmittedFact),
+      (error) => error?.diagnostic?.code === 'station-gate/evidence-identity-mismatch',
+      `${label}: independent gate accepted omitted backslash classification`,
+    );
+  }
+});
+
 test('independent gate includes the selected root manifest in alias collision classification', async () => {
   const { gateStationArtifacts } = await loadGate();
   const base = fixtureArtifacts({

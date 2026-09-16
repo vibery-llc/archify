@@ -264,6 +264,27 @@ test('enumerates one complete NUL-delimited inventory with exact modes and unusu
   assert.ok(reader.inventory.every(({ pathBytes }) => Buffer.isBuffer(pathBytes)));
 });
 
+test('classifies every backslash-containing real-Git path without dropping inventory entries', () => {
+  for (const hostilePath of ['outside\\package.json', 'packages/bad\\root/package.json']) {
+    const fixture = createGitFixture({ files: {
+      'package.json': '{"name":"root","workspaces":["packages/*"]}\n',
+      'packages/valid/package.json': '{"name":"valid"}\n',
+      [hostilePath]: '{"name":"hostile"}\n',
+    } });
+    const reader = openFixture(fixture);
+    const entryIndex = reader.inventory.findIndex(({ path: candidate }) => candidate === hostilePath);
+
+    assert.notEqual(entryIndex, -1, hostilePath);
+    assert.equal(reader.inventory.length, 3, hostilePath);
+    assert.ok(reader.unsupportedPaths.some((fact) => (
+      fact.code === 'station-extract/path-shape-unsupported'
+      && fact.path === hostilePath
+      && fact.pathBytesHex === Buffer.from(hostilePath).toString('hex')
+      && fact.entryIndex === entryIndex
+    )), hostilePath);
+  }
+});
+
 test('classifies invalid UTF-8, unsafe shapes, and case/NFC aliases without dropping inventory entries', () => {
   const fixture = createGitFixture();
   const oid = writeBlobObject(fixture.root, Buffer.from('{}\n'));
@@ -300,6 +321,10 @@ test('rejects malformed, unterminated, duplicate, or internally inconsistent tre
     encodedTreeRecord({ mode: '100600', type: 'blob', pathBytes: Buffer.from('bad-mode') }),
     encodedTreeRecord({ oid: 'z'.repeat(40), pathBytes: Buffer.from('bad-oid') }),
     Buffer.concat([valid, valid]),
+    Buffer.concat([
+      encodedTreeRecord({ pathBytes: Buffer.from('hidden\\package.json') }),
+      Buffer.from('malformed-after-valid-backslash\0'),
+    ]),
     Buffer.concat([valid, Buffer.from([0])]),
   ];
   for (const stdout of malformedCases) {
