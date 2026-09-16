@@ -294,6 +294,20 @@ test('rejects a false coarse fallback for a valid detailed repository', async ()
   }, 'station-gate/unsupported-claim');
 });
 
+test('independent gate includes the selected root manifest in alias collision classification', async () => {
+  const { gateStationArtifacts } = await loadGate();
+  const base = fixtureArtifacts({
+    'package.json': '{"name":"root"}\n',
+    'PACKAGE.JSON': '{"name":"alias"}\n',
+  });
+  assert.ok(base.reader.unsupportedPaths.some(({ code, path }) => (
+    code === 'station-extract/path-case-collision' && path === 'package.json'
+  )));
+  assert.deepEqual(base.evidence.value.analysis.fallback_reason_codes, ['station-fallback/path-collision']);
+  const accepted = gateStationArtifacts(base.evidence.bytes, base.map.bytes, base.reader);
+  assert.equal(accepted.mode, 'coarse');
+});
+
 test('independently proves exact policy-size excess as fallback', async () => {
   const { gateStationArtifacts } = await loadGate();
   const rootBytes = Buffer.from('{"name":"root"}\n');

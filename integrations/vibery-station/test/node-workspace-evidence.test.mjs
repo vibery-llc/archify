@@ -314,6 +314,59 @@ test('never emits whichever workspace manifests happened to parse', async () => 
   assert.equal(result.value.analysis.selected_manifest_count, 3);
 });
 
+test('bounds workspace declarations at 512 before candidate selection', async () => {
+  const { buildStationEvidence } = await loadBuilder();
+  const patterns = (count) => Array.from({ length: count }, (_, index) => `packages/p${index}`);
+  const exact = fakeReader({ 'package.json': manifest({ name: 'root', workspaces: patterns(512) }) });
+  const exactResult = buildStationEvidence(exact.reader);
+  assertWholeProjectFallback(exactResult, ['station-fallback/workspace-manifest-missing']);
+  const excess = fakeReader({ 'package.json': manifest({ name: 'root', workspaces: patterns(513) }) });
+  const excessResult = buildStationEvidence(excess.reader);
+  assertWholeProjectFallback(excessResult, ['station-fallback/workspace-pattern-unsupported']);
+  assert.equal(excessResult.value.analysis.selected_manifest_count, 1);
+});
+
+test('workspace matching consults only bounded manifest candidates, not a large non-manifest inventory', async () => {
+  const { buildStationEvidence } = await loadBuilder();
+  const files = {
+    'package.json': manifest({ name: 'root', workspaces: ['packages/*'] }),
+    'packages/selected/package.json': manifest({ name: 'selected' }),
+  };
+  for (let index = 0; index < 20000; index += 1) files[`src/generated-${index}.js`] = 'ignored';
+  const { reader } = fakeReader(files);
+  let inventoryFinds = 0;
+  reader.inventory = new Proxy(reader.inventory, {
+    get(target, property, receiver) {
+      if (property === 'filter') throw new Error('whole inventory selection scan is forbidden');
+      if (property === 'find') {
+        return (...args) => { inventoryFinds += 1; return target.find(...args); };
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const result = buildStationEvidence(reader);
+  assert.equal(result.value.analysis.detail_eligible, true);
+  assert.deepEqual(result.value.workspace.package_roots, ['packages/selected']);
+  assert.equal(inventoryFinds, 1, 'only root package.json lookup may inspect inventory');
+});
+
+test('root manifest aliases participate in case-collision fallback', async () => {
+  const { buildStationEvidence } = await loadBuilder();
+  const setup = fakeReader({
+    'package.json': manifest({ name: 'root' }),
+    'PACKAGE.JSON': manifest({ name: 'alias' }),
+  });
+  const rootIndex = setup.inventory.findIndex(({ path: filePath }) => filePath === 'package.json');
+  const aliasIndex = setup.inventory.findIndex(({ path: filePath }) => filePath === 'PACKAGE.JSON');
+  setup.reader.unsupportedPaths = Object.freeze([rootIndex, aliasIndex].map((entryIndex) => Object.freeze({
+    code: 'station-extract/path-case-collision',
+    path: setup.inventory[entryIndex].path,
+    pathBytesHex: setup.inventory[entryIndex].pathBytes.toString('hex'),
+    entryIndex,
+  })));
+  assertWholeProjectFallback(buildStationEvidence(setup.reader), ['station-fallback/path-collision']);
+});
+
 test('enforces manifest count and exact per-file boundaries before detail reads', async () => {
   const { buildStationEvidence } = await loadBuilder();
   const exactCount = fakeReader({ 'package.json': manifest({ name: 'root' }) }, { discovered: 512 });

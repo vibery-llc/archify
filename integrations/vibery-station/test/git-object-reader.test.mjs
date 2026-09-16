@@ -170,6 +170,23 @@ test('rejects malformed or credentialed authored URLs and redacts mismatched ori
   });
 });
 
+test('redacts username-only and username-password SCP credentials from origin diagnostics', () => {
+  for (const origin of [
+    'SYNTHETIC_USER@example.test:owner/repo.git',
+    'SYNTHETIC_USER:SYNTHETIC_PASSWORD@example.test:owner/repo.git',
+  ]) {
+    const fixture = createGitFixture();
+    runFixtureGit(fixture.root, ['remote', 'set-url', 'origin', origin]);
+    assert.throws(() => openFixture(fixture, { repositoryUrl: 'https://example.test/other/repo.git' }), (error) => {
+      const serialized = JSON.stringify(error.diagnostic);
+      assert.equal(error.code, 'station-extract/origin-mismatch');
+      assert.doesNotMatch(serialized, /SYNTHETIC_USER|SYNTHETIC_PASSWORD/);
+      assert.match(error.diagnostic.evidence.localOrigin, /^REDACTED@/);
+      return true;
+    });
+  }
+});
+
 test('rejects non-SHA-1 object formats and unavailable commits without exposing process output', () => {
   const fixture = createGitFixture();
   const formatRunner = recordingRunner([], (_command, args) => {
