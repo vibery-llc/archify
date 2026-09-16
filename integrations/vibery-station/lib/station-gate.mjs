@@ -1,4 +1,5 @@
 import { TextDecoder } from 'node:util';
+import { parseRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import {
   DEPENDENCY_SCOPES,
   STATION_CONTRACT_VERSION,
@@ -108,16 +109,19 @@ function exactJson(input, artifact, validate) {
   return value;
 }
 
-function repositoryIdentity(url) {
+function repositoryLocation(url) {
   if (!isStationCanonicalRepositoryUrl(url)) sessionFailure('Reader repository URL is not canonical.', '/repository/url');
-  const parsed = new URL(url);
-  const path = parsed.pathname.slice(1);
-  const identityPath = parsed.hostname === 'github.com' ? path.toLowerCase() : path;
-  return JSON.stringify([parsed.hostname, 'standard', 'repository', identityPath]);
+  const location = parseRepositoryRemote(url, { authored: true });
+  if (!location) sessionFailure('Reader repository URL has no canonical identity.', '/repository/url');
+  return location;
+}
+
+function repositoryIdentity(url) {
+  return repositoryLocation(url).identity;
 }
 
 function repositoryLabel(url) {
-  return new URL(url).pathname.split('/').filter(Boolean).at(-1);
+  return repositoryLocation(url).path.split('/').at(-1);
 }
 
 function pathHasManifestName(pathBytes) {

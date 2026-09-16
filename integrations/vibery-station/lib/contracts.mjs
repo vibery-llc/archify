@@ -1,3 +1,4 @@
+import { parseRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import { throwStationDiagnostic } from './diagnostics.mjs';
 
 export { createStationDiagnostic, StationDiagnosticError } from './diagnostics.mjs';
@@ -181,20 +182,15 @@ function repositoryPath(value, artifact, path, { root = false } = {}) {
 }
 
 export function isStationCanonicalRepositoryUrl(value) {
-  if (typeof value !== 'string' || /[\s\\\u0000-\u001f\u007f?#%]/.test(value)) return false;
-  if (!value.startsWith('https://github.com/') && !value.startsWith('https://gitee.com/')) return false;
-  if (value.endsWith('/') || /\.git$/i.test(value) || /\/(?:\.{1,2})(?:\/|$)/.test(value)) return false;
-  let parsed;
-  try {
-    parsed = new URL(value);
-  } catch {
-    return false;
+  const location = parseRepositoryRemote(value, { authored: true });
+  if (!location) return false;
+  let canonical = location.url;
+  if (location.endpoint === 'standard' && location.provider === 'github') {
+    canonical = `https://github.com/${location.path.toLowerCase()}`;
+  } else if (location.endpoint === 'standard' && location.provider === 'gitee') {
+    canonical = `https://gitee.com/${location.path}`;
   }
-  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.port || parsed.search || parsed.hash) return false;
-  const parts = parsed.pathname.slice(1).split('/');
-  if (parts.length < 2 || parts.some((part) => !part || part === '.' || part === '..')) return false;
-  if (parsed.hostname === 'github.com' && value !== value.toLowerCase()) return false;
-  return parsed.hostname === 'github.com' || parsed.hostname === 'gitee.com';
+  return value === canonical;
 }
 
 function canonicalRepositoryUrl(value, artifact, path) {

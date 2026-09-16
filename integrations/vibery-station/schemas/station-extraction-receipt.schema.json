@@ -14,7 +14,7 @@
       "additionalProperties": false,
       "required": ["url", "revision", "tree_oid", "object_format"],
       "properties": {
-        "url": { "type": "string", "pattern": "^https://(?:github\\.com|gitee\\.com)/[^/]+/[^/]+(?:/[^/]+)*$" },
+        "url": { "type": "string", "pattern": "^(?:https?://[^/@\\s]+(?::[0-9]+)?/[^\\s?#]+|ssh://git@[^/@\\s]+(?::[0-9]+)?/[^\\s?#]+|git@[^/:\\s]+:/?[^\\s?#]+)$" },
         "revision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
         "tree_oid": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
         "object_format": { "const": "sha1" }

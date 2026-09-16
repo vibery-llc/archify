@@ -69,7 +69,7 @@ function repositoryIdentity(evidence) {
   }
   return {
     projectId: expectedProjectId,
-    label: new URL(evidence.repository.url).pathname.split('/').filter(Boolean).at(-1),
+    label: location.path.split('/').at(-1),
   };
 }
 
