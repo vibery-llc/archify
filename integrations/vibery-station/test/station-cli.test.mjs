@@ -186,6 +186,29 @@ test('builds deterministic canonical receipt bytes solely from frozen gate succe
   assert.deepEqual(calls, ['reader', 'evidence', 'projector', 'gate', 'receipt', 'publish']);
 });
 
+test('admits canonical HTTPS, SSH, and SCP repository identities on arbitrary hosts end to end', async () => {
+  const { extractStationMap } = await loadExtract();
+  for (const repositoryUrl of [
+    'https://git.example.test/Org/Repo.git',
+    'ssh://git@git.example.test:2222/Org/Repo.git',
+    'git@git.example.test:Org/Repo.git',
+  ]) {
+    const fixture = createGitFixture({ origin: repositoryUrl });
+    fixture.repositoryUrl = repositoryUrl;
+    let published;
+    const result = await extractStationMap(options(fixture), realPipelineSeams([], (candidate) => {
+      published = candidate;
+      return { generation_id: `generation-${'c'.repeat(64)}` };
+    }));
+    const evidence = JSON.parse(published.evidenceBytes);
+    const map = JSON.parse(published.mapBytes);
+    assert.equal(evidence.repository.url, repositoryUrl);
+    assert.equal(result.receipt.repository.url, repositoryUrl);
+    assert.equal(map.project.id, evidence.repository.id);
+    assert.equal(result.receipt.result.project_id, evidence.repository.id);
+  }
+});
+
 test('classifies every pre-publication failure stage and never calls output', async () => {
   const { extractStationMap } = await loadExtract();
   const fixture = createGitFixture();
