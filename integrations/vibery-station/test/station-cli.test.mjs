@@ -212,6 +212,51 @@ test('classifies every pre-publication failure stage and never calls output', as
   }
 });
 
+test('integration CLI publishes one exact receipt and resolves its immutable generation', async () => {
+  const fixture = createGitFixture();
+  const bundleRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'station-cli-bundle-'));
+  fs.rmdirSync(bundleRoot);
+  const result = spawnSync(process.execPath, [
+    CLI, 'extract', bundleRoot,
+    '--repo-root', fixture.root,
+    '--repository-url', fixture.repositoryUrl,
+    '--revision', fixture.revision,
+    '--json',
+  ], { encoding: 'utf8', shell: false });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  const receipt = JSON.parse(result.stdout);
+  validateStationExtractionReceipt(receipt);
+  const generationId = fs.readFileSync(path.join(bundleRoot, 'CURRENT'), 'utf8').trim();
+  const generation = path.join(bundleRoot, 'generations', generationId);
+  assert.deepEqual(fs.readFileSync(path.join(generation, 'station-receipt.json')), Buffer.from(result.stdout));
+  const evidence = fs.readFileSync(path.join(generation, receipt.artifacts.evidence.file));
+  const map = fs.readFileSync(path.join(generation, receipt.artifacts.map.file));
+  assert.equal(receipt.artifacts.evidence.sha256, sha256Hex(evidence));
+  assert.equal(receipt.artifacts.evidence.bytes, evidence.length);
+  assert.equal(receipt.artifacts.map.sha256, sha256Hex(map));
+  assert.equal(receipt.artifacts.map.bytes, map.length);
+});
+
+test('repository failure emits one typed JSON envelope and leaves bundle untouched', async () => {
+  const fixture = createGitFixture();
+  const bundleRoot = path.join(os.tmpdir(), `station-cli-failure-${process.pid}-${Date.now()}`);
+  const result = spawnSync(process.execPath, [
+    CLI, 'extract', bundleRoot,
+    '--repo-root', fixture.root,
+    '--repository-url', fixture.repositoryUrl,
+    '--revision', 'f'.repeat(40),
+    '--json',
+  ], { encoding: 'utf8', shell: false });
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr, '');
+  const envelope = JSON.parse(result.stdout);
+  assert.equal(envelope.ok, false);
+  assert.equal(envelope.stage, 'repository');
+  assert.equal(envelope.diagnostics[0].code, 'station-extract/revision-unavailable');
+  assert.equal(fs.existsSync(bundleRoot), false);
+});
+
 test('emits one parseable JSON failure envelope on stdout and no default Archify route', async () => {
   await loadCli();
   const result = spawnSync(process.execPath, [CLI, 'extract', 'bundle', '--repo-root', 'repo', '--repository-url', 'url', '--revision', 'bad', '--json', '--json'], {
