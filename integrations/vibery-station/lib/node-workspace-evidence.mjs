@@ -11,9 +11,11 @@ import {
 import {
   canonicalJsonBytes,
   compareCodePoints,
+  compareDeclarations,
   compareFallbackCodes,
   compareFiles,
   comparePackages,
+  compareScopes,
   sha256Hex,
 } from './canonical-json.mjs';
 import { deriveEvidenceId, deriveProjectId } from './identity.mjs';
@@ -271,16 +273,38 @@ function selectWorkspaceEntries(reader, patterns) {
   };
 }
 
-function packageRecord(root, pattern, manifest, file) {
-  const value = {
-    root,
-    name: manifest.name,
-    ...(Object.hasOwn(manifest, 'private') ? { private: manifest.private } : {}),
-    manifest_evidence_id: file.id,
-    workspace_pattern: pattern,
-    declared_dependencies: [],
+function manifestDeclarations(manifest) {
+  const declarations = new Map();
+  for (const scope of DEPENDENCY_SCOPES) {
+    for (const [name, declaredVersion] of Object.entries(manifest[scope] || {})) {
+      const current = declarations.get(name) || { scopes: new Set(), versions: new Set() };
+      current.scopes.add(scope);
+      current.versions.add(declaredVersion);
+      declarations.set(name, current);
+    }
+  }
+  return {
+    values: [...declarations].map(([name, declaration]) => ({
+      name,
+      scopes: [...declaration.scopes].sort(compareScopes),
+    })).sort(compareDeclarations),
+    conflicting: [...declarations.values()].some(({ versions }) => versions.size > 1),
   };
-  return value;
+}
+
+function packageRecord(root, pattern, manifest, file) {
+  const declarations = manifestDeclarations(manifest);
+  return {
+    value: {
+      root,
+      name: manifest.name,
+      ...(Object.hasOwn(manifest, 'private') ? { private: manifest.private } : {}),
+      manifest_evidence_id: file.id,
+      workspace_pattern: pattern,
+      declared_dependencies: declarations.values,
+    },
+    conflicting: declarations.conflicting,
+  };
 }
 
 function assertReader(reader) {
@@ -414,7 +438,13 @@ export function buildStationEvidence(reader) {
     const file = filesByPath.get(entry.path);
     if (!manifest || !file) continue;
     const root = entry === rootEntry ? '.' : entry.path.slice(0, -'/package.json'.length);
-    packages.push(packageRecord(root, entry === rootEntry ? ROOT_MARKER : provenance.get(root), manifest, file));
+    const packageResult = packageRecord(root, entry === rootEntry ? ROOT_MARKER : provenance.get(root), manifest, file);
+    packages.push(packageResult.value);
+    if (packageResult.conflicting) reasons.push('station-fallback/package-name-ambiguous');
+  }
+  const packageNames = packages.map(({ name }) => name);
+  if (new Set(packageNames).size !== packageNames.length) {
+    reasons.push('station-fallback/package-name-ambiguous');
   }
 
   return finish(reader, {

@@ -140,7 +140,10 @@ test('builds root-only evidence from one exact commit blob', async () => {
     private: true,
     manifest_evidence_id: evidenceId,
     workspace_pattern: 'root-package',
-    declared_dependencies: [],
+    declared_dependencies: [{
+      name: '@example/external',
+      scopes: ['dependencies'],
+    }],
   }]);
   assert.deepEqual(result.value.analysis, {
     detail_eligible: true,
