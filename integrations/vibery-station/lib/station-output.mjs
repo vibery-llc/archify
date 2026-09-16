@@ -78,6 +78,7 @@ const BASE_OPERATIONS = Object.freeze({
   readdir: (target) => fs.readdirSync(target),
   mkdir: (target, options) => fs.mkdirSync(target, options),
   openExclusive: (target) => fs.openSync(target, 'wx', 0o600),
+  fstat: (descriptor) => fs.fstatSync(descriptor),
   write: (descriptor, bytes, offset) => fs.writeSync(descriptor, bytes, offset, bytes.length - offset),
   fsyncFile: (descriptor) => fs.fsyncSync(descriptor),
   close: (descriptor) => fs.closeSync(descriptor),
@@ -350,14 +351,6 @@ function syncDirectory(operations, target, phase, durability) {
   }
 }
 
-function safeUnlink(operations, target, phase) {
-  try {
-    operations.unlink(target, phase);
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
-  }
-}
-
 function safeRemoveTree(operations, target) {
   try {
     operations.removeTree(target);
@@ -380,11 +373,44 @@ function assertProtectedPaths(bundleRoot, targets, protectedPaths = []) {
   }
 }
 
-function strictWriteExclusive(operations, target, bytes) {
+function exactFileOwnership(operations, target, expected, { allowPrefix = false } = {}) {
+  try {
+    const stat = operations.lstat(target);
+    if (stat.isSymbolicLink() || !stat.isFile() || !sameIdentity(stat, expected.stat)) return false;
+    const bytes = Buffer.from(operations.readFile(target));
+    return allowPrefix
+      ? bytes.length <= expected.bytes.length && bytes.equals(expected.bytes.subarray(0, bytes.length))
+      : bytes.equals(expected.bytes);
+  } catch {
+    return false;
+  }
+}
+
+function unlinkOwnedFile(operations, target, expected, phase, options) {
+  if (!expected || !exactFileOwnership(operations, target, expected, options)) {
+    throw Object.assign(new Error(`refusing to unlink unowned publication material during ${phase}`), {
+      code: 'ESTATIONOWNERSHIP',
+    });
+  }
+  operations.unlink(target, phase);
+}
+
+function unlinkOwnedFileIfPresent(operations, target, expected, phase, options) {
+  if (pathAbsent(operations, target)) return;
+  unlinkOwnedFile(operations, target, expected, phase, options);
+}
+
+function strictWriteExclusive(operations, target, bytes, ownershipRef) {
   let descriptor;
   let primaryError;
   try {
     descriptor = operations.openExclusive(target);
+    const createdStat = operations.fstat(descriptor);
+    if (!createdStat.isFile()) throw new Error('exclusive publication target is not a regular file');
+    if (ownershipRef) {
+      ownershipRef.stat = createdStat;
+      ownershipRef.bytes = Buffer.from(bytes);
+    }
     let offset = 0;
     while (offset < bytes.length) {
       const written = operations.write(descriptor, bytes, offset);
@@ -400,6 +426,7 @@ function strictWriteExclusive(operations, target, bytes) {
       try { operations.close(descriptor); } catch (closeError) { if (!primaryError) throw closeError; }
     }
   }
+  return ownershipRef;
 }
 
 function publicationPaths(bundleRoot, token) {
@@ -500,6 +527,59 @@ function sameTransactionObservation(left, right) {
   });
 }
 
+function validateRecoveryCleanupOwnership(operations, paths, token, transaction, incompleteOwner) {
+  const fixed = inspectFixedLock(operations, path.dirname(paths.lock));
+  const owner = inspectOwnerFile(operations, path.dirname(paths.owner), token);
+  if (fixed.state !== 'absent') {
+    if (!fixed.owner || fixed.owner.token !== token) {
+      fail('station-output/authority-indeterminate', 'Recovery lock is not owned by the supplied token.');
+    }
+    if (owner.state !== 'absent'
+        && (!owner.owner || owner.owner.token !== token
+          || !sameIdentity(fixed.stat, owner.stat) || !fixed.bytes.equals(owner.bytes))) {
+      fail('station-output/authority-indeterminate', 'Recovery owner does not match fixed lock ownership.');
+    }
+  } else if (owner.state === 'absent' || (!incompleteOwner && owner.owner?.token !== token)) {
+    fail('station-output/authority-indeterminate', 'Recovery owner material is not owned by the supplied token.');
+  }
+  if (transaction?.value && !pathAbsent(operations, paths.pointer)) {
+    let pointerGeneration;
+    try { pointerGeneration = parsePointer(Buffer.from(operations.readFile(paths.pointer))); } catch {
+      fail('station-output/authority-indeterminate', 'Recovery pointer is not exact token-owned publication material.');
+    }
+    if (pointerGeneration !== transaction.value.candidate_generation_id) {
+      fail('station-output/authority-indeterminate', 'Recovery pointer contradicts token-owned transaction metadata.');
+    }
+  }
+}
+
+function recoveryCleanupSnapshot(operations, targets) {
+  const snapshot = new Map();
+  for (const target of targets) {
+    if (pathAbsent(operations, target)) continue;
+    let stat;
+    let bytes;
+    try {
+      stat = operations.lstat(target);
+      if (stat.isSymbolicLink() || !stat.isFile()) throw new Error('not a regular file');
+      bytes = Buffer.from(operations.readFile(target));
+    } catch {
+      fail('station-output/authority-indeterminate', 'Recovery cleanup material could not be owned exactly.');
+    }
+    snapshot.set(target, { stat, bytes });
+  }
+  return snapshot;
+}
+
+function sameCleanupSnapshot(left, right) {
+  if (left.size !== right.size) return false;
+  for (const [target, expected] of left) {
+    const observed = right.get(target);
+    if (!observed || !sameIdentity(expected.stat, observed.stat) || !expected.bytes.equals(observed.bytes)) return false;
+  }
+  return true;
+}
+
 function inspectCurrentAgainstTransaction(operations, bundleRoot, transaction) {
   if (!transaction?.value) return { state: 'none' };
   const currentPath = publicationPaths(bundleRoot).current;
@@ -545,6 +625,21 @@ function inspectRecoveryOwner(operations, bundleRoot, token) {
   } catch {
     return { state: 'unknown' };
   }
+}
+
+function failForOwnerCollision(operations, bundleRoot, token) {
+  const existing = inspectOwnerFile(operations, bundleRoot, token);
+  if (existing.state === 'live') {
+    fail('station-output/publication-busy', 'Another live publisher owns the colliding publication owner file.');
+  }
+  if (existing.state === 'stale') {
+    fail('station-output/publication-lock-stale', 'A stale publication owner requires explicit token recovery.', {
+      recovery_token: token,
+    }, ['inspect the transaction and invoke explicit recovery with the exact retained token']);
+  }
+  const recoverable = inspectRecoveryOwner(operations, bundleRoot, token);
+  fail('station-output/recovery-required', 'A pre-existing publication owner collision requires explicit inspection.',
+    recoverable.state === 'incomplete' ? { recovery_token: token } : {});
 }
 
 export function inspectStationPublication(bundleRootInput, { operations: suppliedOperations } = {}) {
@@ -598,16 +693,26 @@ function acquirePublicationLock(operations, bundleRoot, durability) {
   const paths = publicationPaths(bundleRoot, token);
   const owner = { schema: OWNER_SCHEMA, token, pid: process.pid, process_start_identity: processStartIdentity };
   const ownerPayload = canonicalJsonBytes(owner);
+  const ownerOwnership = {};
   try {
-    strictWriteExclusive(operations, paths.owner, ownerPayload);
+    strictWriteExclusive(operations, paths.owner, ownerPayload, ownerOwnership);
   } catch (error) {
+    if (!ownerOwnership.stat) {
+      if (error?.code === 'EEXIST') failForOwnerCollision(operations, bundleRoot, token);
+      throw error;
+    }
     try {
-      safeUnlink(operations, paths.owner, 'cleanup-unwritten-owner');
-      syncDirectory(operations, bundleRoot, 'cleanup-unwritten-owner', durability);
+      unlinkOwnedFile(operations, paths.owner, ownerOwnership, 'cleanup-unwritten-owner', { allowPrefix: true });
     } catch {
-      fail('station-output/recovery-required', 'Incomplete owner material could not be cleaned safely.', {
-        recovery_token: token,
-      }, ['inspect and recover the exact token-addressed owner material']);
+      if (exactFileOwnership(operations, paths.owner, ownerOwnership, { allowPrefix: true })) {
+        fail('station-output/recovery-required', 'Incomplete owner material could not be cleaned safely.', {
+          recovery_token: token,
+        }, ['inspect and recover the exact token-addressed owner material']);
+      }
+      fail('station-output/durability-unknown', 'Owner cleanup outcome is not durably known.');
+    }
+    try { syncDirectory(operations, bundleRoot, 'cleanup-unwritten-owner', durability); } catch {
+      fail('station-output/durability-unknown', 'Owner cleanup durability is unknown.');
     }
     throw error;
   }
@@ -615,7 +720,12 @@ function acquirePublicationLock(operations, bundleRoot, durability) {
   let ownerStat;
   try {
     ownerStat = regularFile(operations, paths.owner, 'publication owner');
-  } catch {
+    if (!sameIdentity(ownerStat, ownerOwnership.stat)
+        || !Buffer.from(operations.readFile(paths.owner)).equals(ownerPayload)) {
+      fail('station-output/authority-indeterminate', 'Publication owner changed before lock acquisition.');
+    }
+  } catch (error) {
+    if (error instanceof StationDiagnosticError) throw error;
     fail('station-output/recovery-required', 'Publication owner identity could not be verified before lock acquisition.', {
       recovery_token: token,
     }, ['inspect and recover the exact token-addressed owner material']);
@@ -645,12 +755,17 @@ function acquirePublicationLock(operations, bundleRoot, durability) {
     }
 
     try {
-      safeUnlink(operations, paths.owner, 'cleanup-unacquired-owner');
-      syncDirectory(operations, bundleRoot, 'cleanup-unacquired-owner', durability);
+      unlinkOwnedFile(operations, paths.owner, ownerOwnership, 'cleanup-unacquired-owner');
     } catch {
-      fail('station-output/recovery-required', 'Unacquired owner material could not be cleaned safely.', {
-        recovery_token: token,
-      }, ['inspect and recover the exact token-addressed owner material']);
+      if (exactFileOwnership(operations, paths.owner, ownerOwnership)) {
+        fail('station-output/recovery-required', 'Unacquired owner material could not be cleaned safely.', {
+          recovery_token: token,
+        }, ['inspect and recover the exact token-addressed owner material']);
+      }
+      fail('station-output/durability-unknown', 'Unacquired owner cleanup outcome is not durably known.');
+    }
+    try { syncDirectory(operations, bundleRoot, 'cleanup-unacquired-owner', durability); } catch {
+      fail('station-output/durability-unknown', 'Unacquired owner cleanup durability is unknown.');
     }
     if (error?.code === 'EEXIST' || fixedAuthority === 'foreign') {
       const existing = inspectFixedLock(operations, bundleRoot);
@@ -666,7 +781,7 @@ function acquirePublicationLock(operations, bundleRoot, durability) {
   if (!sameIdentity(lockStat, ownerStat)) fail('station-output/recovery-required', 'Publication owner hard-link identity is inconsistent.', {
     recovery_token: token,
   });
-  return { token, owner, bytes: ownerPayload, stat: lockStat, paths };
+  return { token, owner, bytes: ownerPayload, stat: lockStat, ownerOwnership, paths };
 }
 
 function lockStillOwned(operations, lock) {
@@ -676,29 +791,62 @@ function lockStillOwned(operations, lock) {
   } catch { return false; }
 }
 
+function pathAbsent(operations, target) {
+  try {
+    operations.lstat(target);
+    return false;
+  } catch (error) {
+    return error?.code === 'ENOENT';
+  }
+}
+
 function releasePublicationLock(operations, bundleRoot, lock, durability) {
-  if (!lockStillOwned(operations, lock)) throw new Error('publication lock ownership changed');
-  operations.unlink(lock.paths.lock, 'release-publication-lock');
-  syncDirectory(operations, bundleRoot, 'release-publication-lock', durability);
-  operations.unlink(lock.paths.owner, 'cleanup-publication-owner');
-  syncDirectory(operations, bundleRoot, 'cleanup-publication-owner', durability);
+  const lockOwnership = { stat: lock.stat, bytes: lock.bytes };
+  if (!lockStillOwned(operations, lock)) return { state: 'authority-indeterminate' };
+  try {
+    unlinkOwnedFile(operations, lock.paths.lock, lockOwnership, 'release-publication-lock');
+  } catch {
+    if (lockStillOwned(operations, lock)
+        || exactFileOwnership(operations, lock.paths.owner, lock.ownerOwnership)) {
+      return { state: 'retained-recovery' };
+    }
+    return { state: pathAbsent(operations, lock.paths.lock) && pathAbsent(operations, lock.paths.owner)
+      ? 'durability-unknown' : 'authority-indeterminate' };
+  }
+  try { syncDirectory(operations, bundleRoot, 'release-publication-lock', durability); } catch {
+    return exactFileOwnership(operations, lock.paths.owner, lock.ownerOwnership)
+      ? { state: 'retained-recovery' } : { state: 'durability-unknown' };
+  }
+  try {
+    unlinkOwnedFile(operations, lock.paths.owner, lock.ownerOwnership, 'cleanup-publication-owner');
+  } catch {
+    if (exactFileOwnership(operations, lock.paths.owner, lock.ownerOwnership)) return { state: 'retained-recovery' };
+    return { state: pathAbsent(operations, lock.paths.owner) ? 'durability-unknown' : 'authority-indeterminate' };
+  }
+  try { syncDirectory(operations, bundleRoot, 'cleanup-publication-owner', durability); } catch {
+    return { state: 'durability-unknown' };
+  }
+  return { state: 'released' };
 }
 
 function publicationResult(generationId, reused, durability, state = 'committed', reasons = []) {
   const committed = state === 'authority-indeterminate' ? null : state.startsWith('committed');
+  const durabilityUnknown = state === 'committed-durability-unknown';
   return Object.freeze({
     state,
     committed,
     generation_id: generationId,
     reused,
-    recovery_required: state !== 'committed',
+    recovery_required: state !== 'committed' && !durabilityUnknown,
     recovery_reasons: Object.freeze([...new Set(reasons)]),
-    directory_fsync: durability.unsupported ? 'unsupported-on-platform' : 'complete',
-    durability_claim: durability.unsupported
-      ? 'atomic-rename-without-portable-directory-fsync-guarantee'
-      : state === 'committed'
-        ? 'atomic-rename-with-directory-fsync'
-        : 'commit-observed-recovery-incomplete',
+    directory_fsync: durabilityUnknown ? 'unknown' : durability.unsupported ? 'unsupported-on-platform' : 'complete',
+    durability_claim: durabilityUnknown
+      ? 'commit-observed-owner-release-durability-unknown'
+      : durability.unsupported
+        ? 'atomic-rename-without-portable-directory-fsync-guarantee'
+        : state === 'committed'
+          ? 'atomic-rename-with-directory-fsync'
+          : 'commit-observed-recovery-incomplete',
   });
 }
 
@@ -765,6 +913,9 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
   let reused = false;
   let committedState = 'precommit';
   const recoveryReasons = [];
+  const pointerOwnership = {};
+  const journalOwnership = {};
+  const committedOwnership = {};
   let result;
   try {
     if (unresolvedPublicationMaterial(operations, bundleRoot, lock.token)) {
@@ -808,7 +959,7 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
     }
     verifyGenerationFiles(operations, generationPath, candidate);
     barrier('after-generation-published', { generation_id: generationId });
-    strictWriteExclusive(operations, lock.paths.pointer, Buffer.from(`${generationId}\n`));
+    strictWriteExclusive(operations, lock.paths.pointer, Buffer.from(`${generationId}\n`), pointerOwnership);
     const pointerIdentity = regularFile(operations, lock.paths.pointer, 'pointer candidate');
     const journal = {
       schema: JOURNAL_SCHEMA,
@@ -816,7 +967,7 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
       previous_generation_id: previous?.generationId ?? null,
       candidate_generation_id: generationId,
     };
-    strictWriteExclusive(operations, paths.journal, canonicalJsonBytes(journal));
+    strictWriteExclusive(operations, paths.journal, canonicalJsonBytes(journal), journalOwnership);
     syncDirectory(operations, bundleRoot, 'prepare-transaction-journal', durability);
     barrier('before-current-rename', { generation_id: generationId });
     if (!lockStillOwned(operations, lock)
@@ -857,13 +1008,13 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
           token: lock.token,
           previous_generation_id: previous?.generationId ?? null,
           candidate_generation_id: generationId,
-        }));
+        }), committedOwnership);
         syncDirectory(operations, bundleRoot, 'commit-marker', durability);
       } catch { recoveryReasons.push('committed-marker-failed'); }
       if (recoveryReasons.length === 0) {
         try {
-          safeUnlink(operations, paths.journal, 'cleanup-transaction-journal');
-          safeUnlink(operations, paths.committed, 'cleanup-committed-marker');
+          unlinkOwnedFile(operations, paths.journal, journalOwnership, 'cleanup-transaction-journal');
+          unlinkOwnedFile(operations, paths.committed, committedOwnership, 'cleanup-committed-marker');
           syncDirectory(operations, bundleRoot, 'cleanup-transaction', durability);
         } catch { recoveryReasons.push('transaction-cleanup-failed'); }
       }
@@ -880,31 +1031,46 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
       result = publicationResult(generationId, reused, durability, 'authority-indeterminate', recoveryReasons);
     } else {
       let cleanupFailed = false;
-      try { if (lock.paths.pointer) safeUnlink(operations, lock.paths.pointer, 'cleanup-pointer'); } catch { cleanupFailed = true; }
-      try { safeUnlink(operations, paths.journal, 'cleanup-transaction-journal'); } catch { cleanupFailed = true; }
-      try { safeUnlink(operations, paths.committed, 'cleanup-committed-marker'); } catch { cleanupFailed = true; }
+      try {
+        if (lock.paths.pointer) unlinkOwnedFileIfPresent(operations, lock.paths.pointer, pointerOwnership, 'cleanup-pointer', { allowPrefix: true });
+      } catch { cleanupFailed = true; }
+      try {
+        unlinkOwnedFileIfPresent(operations, paths.journal, journalOwnership, 'cleanup-transaction-journal', { allowPrefix: true });
+      } catch { cleanupFailed = true; }
+      try {
+        unlinkOwnedFileIfPresent(operations, paths.committed, committedOwnership, 'cleanup-committed-marker', { allowPrefix: true });
+      } catch { cleanupFailed = true; }
       if (cleanupFailed) {
         fail('station-output/recovery-required', 'Pre-commit cleanup failed; retained owner recovery is required.', {
           recovery_token: lock.token,
         });
       }
-      if (error instanceof StationDiagnosticError) {
-        try { releasePublicationLock(operations, bundleRoot, lock, durability); } catch {
-          fail('station-output/recovery-required', 'Publication lock release failed before commit.', { recovery_token: lock.token });
-        }
-        throw error;
-      }
-      try { releasePublicationLock(operations, bundleRoot, lock, durability); } catch {
+      const release = releasePublicationLock(operations, bundleRoot, lock, durability);
+      if (release.state === 'retained-recovery') {
         fail('station-output/recovery-required', 'Publication lock release failed before commit.', { recovery_token: lock.token });
       }
+      if (release.state === 'durability-unknown') {
+        fail('station-output/durability-unknown', 'Publication owner release durability is unknown.');
+      }
+      if (release.state === 'authority-indeterminate') {
+        fail('station-output/authority-indeterminate', 'Publication owner authority changed during pre-commit cleanup.');
+      }
+      if (error instanceof StationDiagnosticError) throw error;
       fail('station-output/commit-failed', 'Immutable generation publication failed before CURRENT commit.');
     }
   }
 
   if (result.state !== 'committed') return result;
-  try { releasePublicationLock(operations, bundleRoot, lock, durability); } catch {
+  const release = releasePublicationLock(operations, bundleRoot, lock, durability);
+  if (release.state === 'retained-recovery') {
     recoveryReasons.push('publication-lock-release-failed');
     result = publicationResult(generationId, reused, durability, 'committed-recovery-required', recoveryReasons);
+  } else if (release.state === 'durability-unknown') {
+    recoveryReasons.push('publication-owner-release-durability-unknown');
+    result = publicationResult(generationId, reused, durability, 'committed-durability-unknown', recoveryReasons);
+  } else if (release.state === 'authority-indeterminate') {
+    recoveryReasons.push('publication-owner-authority-changed');
+    result = publicationResult(generationId, reused, durability, 'authority-indeterminate', recoveryReasons);
   }
   return result;
 }
@@ -995,6 +1161,13 @@ export function recoverStationPublication(bundleRootInput, {
     const contents = verifyGenerationFiles(operations, generationPath);
     validateResolvedContents(contents, current.generationId);
   }
+  const cleanupPhases = [
+    [paths.pointer, 'recover-pointer'], [paths.journal, 'recover-transaction-journal'],
+    [paths.committed, 'recover-committed-marker'], [paths.lock, 'recover-publication-lock'],
+    [paths.owner, 'recover-owner-file'],
+  ];
+  validateRecoveryCleanupOwnership(operations, paths, recoveryToken, transaction, incompleteOwner);
+  const cleanupFirst = recoveryCleanupSnapshot(operations, cleanupPhases.map(([target]) => target));
   barrier('before-recovery-reattest', { recovery_token: recoveryToken });
   const second = inspectRecoveryOwner(operations, bundleRoot, recoveryToken);
   if ((incompleteOwner && second.state !== 'incomplete')
@@ -1007,12 +1180,15 @@ export function recoverStationPublication(bundleRootInput, {
   if (!sameTransactionObservation(transaction, transactionSecond)) {
     fail('station-output/authority-indeterminate', 'Recovery transaction metadata changed during token reattestation.');
   }
+  const cleanupSecond = recoveryCleanupSnapshot(operations, cleanupPhases.map(([target]) => target));
+  if (!sameCleanupSnapshot(cleanupFirst, cleanupSecond)) {
+    fail('station-output/authority-indeterminate', 'Recovery cleanup ownership changed during token reattestation.');
+  }
   const durability = { unsupported: false };
-  for (const [target, phase] of [
-    [paths.pointer, 'recover-pointer'], [paths.journal, 'recover-transaction-journal'],
-    [paths.committed, 'recover-committed-marker'], [paths.lock, 'recover-publication-lock'],
-    [paths.owner, 'recover-owner-file'],
-  ]) safeUnlink(operations, target, phase);
+  for (const [target, phase] of cleanupPhases) {
+    const ownership = cleanupSecond.get(target);
+    if (ownership) unlinkOwnedFile(operations, target, ownership, phase);
+  }
   syncDirectory(operations, bundleRoot, 'recover-publication', durability);
   return Object.freeze({
     state: 'recovered',

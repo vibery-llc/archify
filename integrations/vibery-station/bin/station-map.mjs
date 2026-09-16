@@ -123,7 +123,8 @@ export async function runStationMap(argv = process.argv.slice(2), seams) {
       else process.stderr.write(`[${envelope.diagnostics[0].code}] ${envelope.diagnostics[0].message}\n`);
       return 1;
     }
-    if (result.publication.state === 'committed-recovery-required') {
+    if (result.publication.state === 'committed-recovery-required'
+        || result.publication.state === 'committed-durability-unknown') {
       const envelope = {
         ok: true,
         command: 'station extract',
@@ -131,7 +132,11 @@ export async function runStationMap(argv = process.argv.slice(2), seams) {
         receipt: result.receipt,
       };
       if (options.json) process.stdout.write(`${JSON.stringify(envelope)}\n`);
-      else process.stderr.write(`station extract committed ${result.publication.generation_id}; recovery cleanup required\n`);
+      else if (result.publication.state === 'committed-recovery-required') {
+        process.stderr.write(`station extract committed ${result.publication.generation_id}; recovery cleanup required\n`);
+      } else {
+        process.stderr.write(`station extract committed ${result.publication.generation_id}; owner-release durability unknown\n`);
+      }
       return 0;
     }
     if (options.json) process.stdout.write(result.receiptBytes);
