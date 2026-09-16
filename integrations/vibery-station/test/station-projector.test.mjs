@@ -325,7 +325,7 @@ test('collapses every evidence-builder fallback reason to one evidence-bound coa
   const builderReasons = FALLBACK_REASON_CODES.filter((reason) => (
     reason !== 'station-fallback/room-count-out-of-range'
   ));
-  assert.equal(builderReasons.length, 15);
+  assert.equal(builderReasons.length, 16);
   for (const reason of builderReasons) {
     const evidence = fallbackEvidence([reason]);
     assertCoarseMap(await project(evidence), evidence, [reason]);

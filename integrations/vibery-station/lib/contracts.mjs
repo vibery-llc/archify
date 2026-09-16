@@ -37,6 +37,7 @@ export const FALLBACK_REASON_CODES = Object.freeze([
   'station-fallback/workspace-manifest-invalid',
   'station-fallback/workspace-root-ambiguous',
   'station-fallback/path-collision',
+  'station-fallback/path-unsupported',
   'station-fallback/manifest-count-exceeded',
   'station-fallback/selected-manifest-bytes-exceeded',
   'station-fallback/package-name-ambiguous',

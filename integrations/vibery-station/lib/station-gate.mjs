@@ -49,6 +49,11 @@ const COLLISION_CODES = new Set([
   'station-extract/path-case-collision',
   'station-extract/path-nfc-collision',
 ]);
+const UNSUPPORTED_SELECTED_PATH_CODES = new Set([
+  'station-extract/path-encoding-unsupported',
+  'station-extract/path-control-unsupported',
+  'station-extract/path-shape-unsupported',
+]);
 
 function failure(code, message, artifact, path = '/') {
   throw new StationDiagnosticError(createStationDiagnostic({
@@ -425,6 +430,11 @@ function selectEntries(reader, patterns) {
   if (reader.unsupportedPaths.some(({ code, entryIndex }) => COLLISION_CODES.has(code) && selectedIndexes.has(entryIndex))) {
     reasons.push('station-fallback/path-collision');
   }
+  if (reader.unsupportedPaths.some(({ code, entryIndex }) => (
+    UNSUPPORTED_SELECTED_PATH_CODES.has(code) && selectedIndexes.has(entryIndex)
+  ))) {
+    reasons.push('station-fallback/path-unsupported');
+  }
   return {
     reasons,
     selected,
@@ -524,6 +534,18 @@ function reconstructEvidence(reader) {
       workspace: { ...workspace, patterns: [] },
       reasons: selectionReasons,
       selectedCount: 1,
+    });
+  }
+  if (selectionReasons.includes('station-fallback/path-unsupported')) {
+    return evidenceResult(reader, {
+      files: [rootFile],
+      workspace: {
+        ...emptyWorkspace(),
+        root_manifest_evidence_id: rootFile.id,
+        patterns: declaration.patterns,
+      },
+      reasons: selectionReasons,
+      selectedCount: selected.length,
     });
   }
 

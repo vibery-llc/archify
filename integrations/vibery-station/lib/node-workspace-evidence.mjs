@@ -27,6 +27,11 @@ const COLLISION_CODES = new Set([
   'station-extract/path-case-collision',
   'station-extract/path-nfc-collision',
 ]);
+const UNSUPPORTED_SELECTED_PATH_CODES = new Set([
+  'station-extract/path-encoding-unsupported',
+  'station-extract/path-control-unsupported',
+  'station-extract/path-shape-unsupported',
+]);
 
 function plainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -223,10 +228,10 @@ function rootsOverlap(roots) {
   )));
 }
 
-function selectedHasReaderCollision(reader, selectedEntries) {
+function selectedHasReaderClassification(reader, selectedEntries, codes) {
   const selectedIndexes = new Set(selectedEntries.map((entry) => reader.inventory.indexOf(entry)));
   return reader.unsupportedPaths.some(({ code, entryIndex }) => (
-    COLLISION_CODES.has(code) && selectedIndexes.has(entryIndex)
+    codes.has(code) && selectedIndexes.has(entryIndex)
   ));
 }
 
@@ -264,7 +269,12 @@ function selectWorkspaceEntries(reader, patterns) {
   if (rootsCollide([...byRoot.keys()])) reasons.push('station-fallback/path-collision');
 
   const selected = [...byRoot.values()].map(([match]) => match.entry);
-  if (selectedHasReaderCollision(reader, selected)) reasons.push('station-fallback/path-collision');
+  if (selectedHasReaderClassification(reader, selected, COLLISION_CODES)) {
+    reasons.push('station-fallback/path-collision');
+  }
+  if (selectedHasReaderClassification(reader, selected, UNSUPPORTED_SELECTED_PATH_CODES)) {
+    reasons.push('station-fallback/path-unsupported');
+  }
   return {
     reasons,
     selected,
@@ -388,6 +398,18 @@ export function buildStationEvidence(reader) {
       workspace: { ...workspace, patterns: [] },
       reasons: selectionReasons,
       selectedCount: 1,
+    });
+  }
+  if (selectionReasons.includes('station-fallback/path-unsupported')) {
+    return finish(reader, {
+      files: [rootFile],
+      workspace: {
+        ...emptyWorkspace(),
+        root_manifest_evidence_id: rootFile.id,
+        patterns: declaration.patterns,
+      },
+      reasons: selectionReasons,
+      selectedCount: selectedEntries.length,
     });
   }
 
