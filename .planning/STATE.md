@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-09-16T15:37:21.939Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-09-16T15:46:48.000Z"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 8
-  completed_plans: 3
-  percent: 38
+  completed_plans: 4
+  percent: 50
 ---
 
 # Session State
@@ -27,13 +27,13 @@ See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.
 ## Current Position
 
 Phase: 01 (deterministic-immutable-commit-extraction) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 **Milestone:** v1.0 Part 02 deterministic Station substrate
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
 **Status:** Ready to execute
-**Plans:** 3/8 complete; next is `01-04-PLAN.md`
-**Requirement coverage:** 16/16 assigned to plans exactly once; 6 complete; 0 unmapped; 0 duplicate assignments
-**Current focus:** Plan 01-04 — complete structural projection and coarse fallback
+**Plans:** 4/8 complete; next is `01-05-PLAN.md`
+**Requirement coverage:** 16/16 assigned to plans exactly once; 8 complete; 0 unmapped; 0 duplicate assignments
+**Current focus:** Plan 01-05 — independent fail-closed Station gate
 
 ## Locked Boundaries
 
@@ -81,6 +81,9 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-02]: Return every discovered manifest with explicit count-policy status and exact size probes rather than truncating or partially reading. — The evidence layer can choose truthful whole-project fallback only when accounting is complete.
 - [Phase 01-03]: Represent the valid root manifest as package root `.` with the `root-package` marker while npm workspace `package_roots` contains only matched members. — This keeps every selected manifest represented without making the projector treat repository root as a workspace path group.
 - [Phase 01-03]: Treat trustworthy manifest count and size excess as whole-project fallback, but propagate object stat/read/probe inconsistencies as hard failures. — Policy may reduce detail only after immutable evidence integrity is established.
+- [Phase 01-04]: For npm workspaces, project exactly the complete declared workspace package-root set while retaining the root package manifest as evidence rather than inventing a root room. — Workspace topology must follow declared membership and first-path-segment structure only.
+- [Phase 01-04]: Aggregate only exact cross-room package declarations by ordered room pair, preserving sorted scopes and declaring-manifest evidence while suppressing same-room loops. — Declarations support dependency evidence, not runtime or causality claims.
+- [Phase 01-04]: Collapse every approved unsupported shape or out-of-range room count to one evidence-bound project-root room with no relations or detailed membership. — Coarse fallback must never preserve a partial topology or hide integrity defects.
 
 ## Performance Metrics
 
@@ -89,13 +92,14 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 | 01-01 | 10 min | 2 | 9 |
 | Phase 01 P02 | 9 min | 2 tasks | 3 files |
 | Phase 01 P03 | 8 min | 2 tasks | 2 files |
+| Phase 01 P04 | 7 min | 2 tasks | 2 files |
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T15:37:21.916Z
-- **Stopped at:** Completed 01-03-PLAN.md
+- **Last session:** 2026-09-16T15:46:48.000Z
+- **Stopped at:** Completed 01-04-PLAN.md
 - **Resume file:** None
 
 ## Next Action
 
-Execute `01-04-PLAN.md` only when authorized; consume validated evidence values and exact bytes without weakening complete membership, declaration provenance, or fallback truthfulness.
+Execute `01-05-PLAN.md` only when authorized; independently reconstruct the complete evidence ledger and structural/coarse map rather than trusting projector-authored identities or claims.

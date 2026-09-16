@@ -19,8 +19,8 @@
 ### Station Projection
 
 - [x] **MAP-01**: The projector derives project, room, relation, evidence, and snapshot IDs from versioned canonical structural inputs; durable topology IDs exclude revision, display labels, and layout.
-- [ ] **MAP-02**: Supported Node/npm workspaces produce a complete, disjoint, sorted one-to-five-room `station-map/v1` projection grouped by first workspace path segment, with exact aggregated cross-room dependency directions and no same-room self-loop topology.
-- [ ] **MAP-03**: Unsupported but integrity-valid repository shapes produce exactly one evidence-bound `coarse-project` room, zero relations, `confidence: coarse`, and one or more versioned fallback reason codes without partial detailed claims.
+- [x] **MAP-02**: Supported Node/npm workspaces produce a complete, disjoint, sorted one-to-five-room `station-map/v1` projection grouped by first workspace path segment, with exact aggregated cross-room dependency directions and no same-room self-loop topology.
+- [x] **MAP-03**: Unsupported but integrity-valid repository shapes produce exactly one evidence-bound `coarse-project` room, zero relations, `confidence: coarse`, and one or more versioned fallback reason codes without partial detailed claims.
 
 ### Fail-Closed Gate
 
@@ -75,8 +75,8 @@
 | EVID-01 | Phase 1 | Complete |
 | EVID-02 | Phase 1 | Complete |
 | MAP-01 | Phase 1 | Complete |
-| MAP-02 | Phase 1 | Pending |
-| MAP-03 | Phase 1 | Pending |
+| MAP-02 | Phase 1 | Complete |
+| MAP-03 | Phase 1 | Complete |
 | GATE-01 | Phase 1 | Pending |
 | GATE-02 | Phase 1 | Pending |
 | OUT-01 | Phase 1 | Pending |
@@ -93,4 +93,4 @@
 
 ---
 *Requirements defined: 2026-09-16*
-*Last updated: 2026-09-16 after Plan 01-03 bounded Node workspace evidence ledger*
+*Last updated: 2026-09-16 after Plan 01-04 complete structural projection and coarse fallback*
