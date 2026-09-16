@@ -239,6 +239,7 @@ function parseTreeInventory(output) {
   };
 
   for (const [entryIndex, entry] of inventory.entries()) {
+    if (entry.pathBytes.includes(0x5c)) classify(entryIndex, 'station-extract/path-shape-unsupported');
     if (entry.path === null) {
       classify(entryIndex, 'station-extract/path-encoding-unsupported');
       continue;

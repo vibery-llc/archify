@@ -146,6 +146,7 @@ function unsupportedInventoryFacts(inventory) {
     });
   };
   for (const [index, entry] of inventory.entries()) {
+    if (entry.pathBytes.includes(0x5c)) add(index, 'station-extract/path-shape-unsupported');
     if (entry.path === null) {
       add(index, 'station-extract/path-encoding-unsupported');
       continue;
