@@ -199,7 +199,7 @@ function entryAtPath(reader, path) {
 }
 
 function wildcardEntries(reader, parsed) {
-  const prefix = `${parsed.prefix}/`;
+  const prefix = parsed.prefix ? `${parsed.prefix}/` : '';
   return reader.inventory.filter((entry) => {
     if (typeof entry.path !== 'string' || !entry.path.startsWith(prefix) || !entry.path.endsWith('/package.json')) return false;
     const root = entry.path.slice(0, -'/package.json'.length);
