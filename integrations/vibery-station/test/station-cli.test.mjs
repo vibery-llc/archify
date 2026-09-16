@@ -261,6 +261,44 @@ test('integration CLI publishes one exact receipt and resolves its immutable gen
   assert.equal(receipt.artifacts.map.bytes, map.length);
 });
 
+test('CLI discriminates committed recovery from indeterminate authority without hiding a committed replacement', async () => {
+  const { runStationMap } = await loadCli();
+  const fixture = createGitFixture();
+  const args = [
+    'extract', path.join(os.tmpdir(), 'unused-publication-state'),
+    '--repo-root', fixture.root,
+    '--repository-url', fixture.repositoryUrl,
+    '--revision', fixture.revision,
+    '--json',
+  ];
+  const originalWrite = process.stdout.write;
+  try {
+    for (const [publication, expectedStatus, expectedOk] of [[{
+      state: 'committed-recovery-required', committed: true,
+      generation_id: `generation-${'d'.repeat(64)}`, recovery_required: true,
+      recovery_reasons: ['publication-lock-release-failed'],
+    }, 0, true], [{
+      state: 'authority-indeterminate', committed: null,
+      generation_id: `generation-${'e'.repeat(64)}`, recovery_required: true,
+      recovery_reasons: ['rename-authority-indeterminate'],
+    }, 1, false]]) {
+      let stdout = '';
+      process.stdout.write = (chunk) => { stdout += chunk; return true; };
+      const status = await runStationMap(args, realPipelineSeams([], () => publication));
+      const envelope = JSON.parse(stdout);
+      assert.equal(status, expectedStatus);
+      assert.equal(envelope.ok, expectedOk);
+      assert.equal(envelope.publication.state, publication.state);
+      assert.equal(envelope.publication.committed, publication.committed);
+      assert.equal(envelope.publication.generation_id, publication.generation_id);
+      if (expectedOk) assert.equal(envelope.receipt.ok, true);
+      else assert.equal(envelope.stage, 'publication');
+    }
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+});
+
 test('repository failure emits one typed JSON envelope and leaves bundle untouched', async () => {
   const fixture = createGitFixture();
   const bundleRoot = path.join(os.tmpdir(), `station-cli-failure-${process.pid}-${Date.now()}`);
