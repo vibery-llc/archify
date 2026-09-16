@@ -9,6 +9,7 @@ import {
   canonicalJsonBytes,
   compareCodePoints,
   compareEvidenceIds,
+  compareFallbackCodes,
   compareRelations,
   compareRooms,
   compareScopes,
@@ -23,6 +24,7 @@ import {
 } from './identity.mjs';
 
 const ROOT_STRUCTURAL_KEY = 'root-package';
+const COARSE_STRUCTURAL_KEY = 'project-root';
 const WORKSPACE_STRUCTURAL_PREFIX = 'workspace-path-group:';
 
 function sortedUnique(values, comparator = compareCodePoints) {
@@ -186,6 +188,31 @@ function structuralRelations(evidence, rooms, indexes) {
   })).sort(compareRelations);
 }
 
+function coarseRoom(evidence, projectId, repositoryLabel) {
+  const rootPackage = evidence.packages.find(({ root }) => root === '.');
+  return {
+    id: deriveRoomId(projectId, COARSE_STRUCTURAL_KEY),
+    project_id: projectId,
+    kind: 'coarse-project',
+    structural_key: COARSE_STRUCTURAL_KEY,
+    label: rootPackage?.name || repositoryLabel,
+    package_roots: [],
+    confidence: 'coarse',
+    evidence_ids: sortedUnique(evidence.files.map(({ id }) => id), compareEvidenceIds),
+  };
+}
+
+function coarseMap(evidence, evidenceHash, project, reasons) {
+  return assembleMap(
+    evidence,
+    evidenceHash,
+    project,
+    [coarseRoom(evidence, project.projectId, project.label)],
+    [],
+    sortedUnique(reasons, compareFallbackCodes),
+  );
+}
+
 function assembleMap(evidence, evidenceHash, project, rooms, relations, reasons) {
   const coarse = reasons.length > 0;
   const value = {
@@ -220,15 +247,20 @@ export function projectStationMap(validatedEvidence, evidenceBytes) {
   const evidenceHash = sha256Hex(exactBytes);
 
   if (!validatedEvidence.analysis.detail_eligible) {
-    integrityFailure('Unsupported evidence cannot be projected as structural detail.');
+    return coarseMap(
+      validatedEvidence,
+      evidenceHash,
+      project,
+      validatedEvidence.analysis.fallback_reason_codes,
+    );
   }
 
   const indexes = packageIndex(validatedEvidence);
   const rooms = structuralRooms(validatedEvidence, project.projectId, indexes);
   if (rooms.length < 1 || rooms.length > 5) {
-    integrityFailure('Structural workspace room count is outside the detailed projection range.', {
-      room_count: rooms.length,
-    });
+    return coarseMap(validatedEvidence, evidenceHash, project, [
+      'station-fallback/room-count-out-of-range',
+    ]);
   }
 
   return assembleMap(
