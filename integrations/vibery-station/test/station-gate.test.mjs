@@ -386,3 +386,37 @@ test('rejects false, replaced, unknown, and omitted fallback causes without a pa
     value.fallback.reason_codes = ['station-fallback/not-approved'];
   }, 'station-gate/schema-invalid');
 });
+
+test('rejects every coarse-room shape, evidence, relation, count, confidence, and mode mutation', async () => {
+  const base = fixtureArtifacts({ 'README.md': 'no manifest\n' });
+  await rejectMutation(base, 'map', (value) => {
+    value.rooms[0].id = `room-${OTHER_64}`;
+  }, 'station-gate/topology-identity-mismatch');
+  for (const mutate of [
+    (value) => { value.rooms[0].label = 'invented'; },
+    (value) => { value.rooms[0].evidence_ids = [`evidence-${OTHER_64}`]; },
+  ]) {
+    await rejectMutation(base, 'map', mutate, 'station-gate/unsupported-claim');
+  }
+  for (const mutate of [
+    (value) => { value.snapshot.mode = 'structural'; },
+    (value) => { value.fallback.used = false; },
+    (value) => { value.rooms[0].kind = 'component'; },
+    (value) => { value.rooms[0].structural_key = 'root-package'; },
+    (value) => { value.rooms[0].package_roots = ['.']; },
+    (value) => { value.rooms[0].confidence = 'high'; },
+    (value) => { value.rooms.push(clone(value.rooms[0])); },
+    (value) => {
+      value.relations.push({
+        id: deriveRelationId(deriveRoomId(value.project.id, 'project-root'), deriveRoomId(value.project.id, 'invented')),
+        kind: 'declared-package-dependency',
+        from_room_id: deriveRoomId(value.project.id, 'project-root'),
+        to_room_id: deriveRoomId(value.project.id, 'invented'),
+        scopes: ['dependencies'],
+        evidence_ids: [`evidence-${OTHER_64}`],
+      });
+    },
+  ]) {
+    await rejectMutation(base, 'map', mutate, 'station-gate/schema-invalid');
+  }
+});
