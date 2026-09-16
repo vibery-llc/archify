@@ -328,3 +328,61 @@ test('treats object probe/read inconsistency as a typed hard failure, never fall
     },
   );
 });
+
+test('returns publication buffers and metadata that callers cannot mutate', async () => {
+  const { gateStationArtifacts } = await loadGate();
+  const base = fixtureArtifacts();
+  const result = gateStationArtifacts(base.evidence.bytes, base.map.bytes, base.reader);
+
+  const exposedEvidence = result.evidence_bytes;
+  const exposedMap = result.map_bytes;
+  exposedEvidence.fill(0);
+  exposedMap.fill(0);
+  assert.deepEqual(result.evidence_bytes, base.evidence.bytes);
+  assert.deepEqual(result.map_bytes, base.map.bytes);
+  assert.equal(Object.isFrozen(result), true);
+  assert.equal(Object.isFrozen(result.repository), true);
+  assert.equal(Object.isFrozen(result.fallback_reason_codes), true);
+  assert.throws(() => { result.mode = 'coarse'; }, TypeError);
+});
+
+test('uses bounded diagnostics without absolute paths, secrets, stacks, warnings, or fallback results', async () => {
+  const { gateStationArtifacts } = await loadGate();
+  const base = fixtureArtifacts();
+  const unsafeReader = Object.freeze({
+    ...base.reader,
+    repository: Object.freeze({
+      ...base.reader.repository,
+      url: 'https://user:super-secret@github.com/example/station-reader',
+    }),
+  });
+  assert.throws(
+    () => gateStationArtifacts(base.evidence.bytes, base.map.bytes, unsafeReader),
+    (error) => {
+      const serialized = JSON.stringify(error.diagnostic);
+      assert.equal(error.diagnostic.code, 'station-gate/evidence-identity-mismatch');
+      assert.equal(error.diagnostic.severity, 'error');
+      assert.doesNotMatch(serialized, /super-secret|station-git-reader-|stack|warning/i);
+      assert.doesNotMatch(serialized, new RegExp(base.fixture.root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+      assert.equal(error.result, undefined);
+      return true;
+    },
+  );
+});
+
+test('rejects false, replaced, unknown, and omitted fallback causes without a partial result', async () => {
+  const base = fixtureArtifacts({ 'README.md': 'no manifest\n' });
+  assert.equal(base.map.value.snapshot.mode, 'coarse');
+  await rejectMutation(base, 'evidence', (value) => {
+    value.analysis.fallback_reason_codes = ['station-fallback/workspace-shape-unsupported'];
+  }, 'station-gate/unsupported-claim');
+  await rejectMutation(base, 'map', (value) => {
+    value.fallback.reason_codes = ['station-fallback/workspace-shape-unsupported'];
+  }, 'station-gate/unsupported-claim');
+  await rejectMutation(base, 'map', (value) => {
+    value.fallback.reason_codes = [];
+  }, 'station-gate/schema-invalid');
+  await rejectMutation(base, 'map', (value) => {
+    value.fallback.reason_codes = ['station-fallback/not-approved'];
+  }, 'station-gate/schema-invalid');
+});
