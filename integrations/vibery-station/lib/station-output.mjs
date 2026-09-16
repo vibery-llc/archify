@@ -389,12 +389,12 @@ function recoveryState(operations, bundleRoot) {
   return { failureMarkers, recoveryFiles };
 }
 
-function assertNoUnresolvedRecovery(operations, bundleRoot, { readers = false } = {}) {
+function assertNoUnresolvedRecovery(operations, bundleRoot) {
   const state = recoveryState(operations, bundleRoot);
-  if (state.failureMarkers.length || (!readers && state.recoveryFiles.length)) {
-    fail('station-output/recovery-required', 'Bundle contains retained pointer-recovery material requiring deterministic manual inspection.', {
+  if (state.failureMarkers.length) {
+    fail('station-output/recovery-required', 'Bundle contains a rollback-failure marker requiring deterministic manual inspection.', {
       failure_markers: state.failureMarkers,
-      ...(!readers ? { recovery_files: state.recoveryFiles } : {}),
+      recovery_files: state.recoveryFiles,
     }, ['follow the retained recovery marker, verify CURRENT once, and preserve every immutable generation']);
   }
 }
@@ -413,6 +413,32 @@ function assertProtectedPaths(bundleRoot, targets, protectedPaths = []) {
   }
 }
 
+function ensureRecoveryMaterial({
+  operations, bundleRoot, recoveryPath, recoveryBytes, durability,
+}) {
+  if (exists(operations, recoveryPath)) {
+    regularFile(operations, recoveryPath, 'pointer recovery');
+    if (!Buffer.from(operations.readFile(recoveryPath)).equals(recoveryBytes)) {
+      fail('station-output/commit-rollback-failed', 'Retained pointer recovery bytes conflict with the captured prior authority.', {
+        recovery_file: path.basename(recoveryPath),
+      });
+    }
+    return;
+  }
+  writeExclusive(operations, recoveryPath, recoveryBytes);
+  syncDirectory(operations, bundleRoot, 'retain-recovery', durability);
+}
+
+function currentIsCommittedCandidate(operations, currentPath, pointerIdentity, generationId) {
+  try {
+    const current = regularFile(operations, currentPath, 'CURRENT');
+    return sameIdentity(current, pointerIdentity)
+      && Buffer.from(operations.readFile(currentPath)).equals(Buffer.from(`${generationId}\n`, 'utf8'));
+  } catch {
+    return false;
+  }
+}
+
 function restorePreviousPointer({
   operations, bundleRoot, currentPath, previous, generationId, recoveryPath, durability,
 }) {
@@ -426,8 +452,6 @@ function restorePreviousPointer({
       operations.unlink(currentPath, 'restore-current');
     }
     syncDirectory(operations, bundleRoot, 'restore-current', durability);
-    safeUnlink(operations, recoveryPath, 'cleanup-recovery');
-    syncDirectory(operations, bundleRoot, 'cleanup-recovery', durability);
   } catch {
     const failureMarker = path.join(bundleRoot, `CURRENT.rollback-failed-${generationId}`);
     try {
@@ -441,21 +465,23 @@ function restorePreviousPointer({
         syncDirectory(operations, bundleRoot, 'retain-rollback-failure', durability);
       }
     } catch {
-      // The original recovery file and immutable generations remain the primary material.
+      // The retained recovery file and immutable generations remain primary material.
     }
+    const markerExists = exists(operations, failureMarker);
     fail('station-output/commit-rollback-failed', 'CURRENT commit failed and prior authority could not be durably restored.', {
       previous_generation_id: previous?.generationId ?? null,
       candidate_generation_id: generationId,
       recovery_file: path.basename(recoveryPath),
-      failure_marker: path.basename(failureMarker),
+      ...(markerExists ? { failure_marker: path.basename(failureMarker) } : {}),
       manual_recovery: previous
         ? `atomically replace CURRENT with ${previous.generationId} plus LF`
         : 'atomically remove CURRENT',
     }, ['use the retained recovery file to restore CURRENT; do not delete either immutable generation']);
   }
-  fail('station-output/commit-failed', 'CURRENT commit durability failed; prior authority was restored.', {
+  fail('station-output/commit-failed', 'CURRENT commit durability failed; prior authority was restored with recovery material retained.', {
     previous_generation_id: previous?.generationId ?? null,
     candidate_generation_id: generationId,
+    recovery_file: path.basename(recoveryPath),
   });
 }
 
@@ -502,6 +528,7 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
   let stagingCreated = false;
   let stagingIdentity;
   let pointerCommitted = false;
+  let pointerIdentity;
   let recoveryCreated = false;
   let reused = false;
 
@@ -543,7 +570,7 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
     barrier('after-generation-published', { generation_id: generationId });
 
     writeExclusive(operations, pointerPath, Buffer.from(`${generationId}\n`, 'utf8'));
-    const pointerIdentity = regularFile(operations, pointerPath, 'pointer candidate');
+    pointerIdentity = regularFile(operations, pointerPath, 'pointer candidate');
     const recoveryBytes = previous ? previous.bytes : Buffer.from('NONE\n', 'utf8');
     if (exists(operations, recoveryPath)) {
       fail('station-output/recovery-required', 'Candidate recovery path already exists and will not be deleted automatically.', {
@@ -569,22 +596,28 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
       fail('station-output/path-invalid', 'Pointer candidate or recovery identity changed before CURRENT publication.');
     }
     verifyGenerationFiles(operations, generationPath, candidate);
-    if (previous) {
-      const currentStat = regularFile(operations, currentPath, 'CURRENT');
-      if (!sameIdentity(currentStat, previous.stat)
-          || !operations.readFile(currentPath).equals(previous.bytes)) {
-        fail('station-output/path-invalid', 'CURRENT changed after publication preflight.');
+    const assertCurrentStillPreflighted = () => {
+      canonicalAuthored(currentPath, 'CURRENT');
+      if (previous) {
+        const currentStat = regularFile(operations, currentPath, 'CURRENT');
+        if (!sameIdentity(currentStat, previous.stat)
+            || !Buffer.from(operations.readFile(currentPath)).equals(previous.bytes)) {
+          fail('station-output/path-invalid', 'CURRENT changed after publication preflight.');
+        }
+      } else if (exists(operations, currentPath)) {
+        fail('station-output/path-invalid', 'CURRENT appeared after publication preflight.');
       }
-    } else if (exists(operations, currentPath)) {
-      fail('station-output/path-invalid', 'CURRENT appeared after publication preflight.');
-    }
+    };
+    assertCurrentStillPreflighted();
+    barrier('after-current-recheck', { generation_id: generationId });
+    assertCurrentStillPreflighted();
     operations.rename(pointerPath, currentPath, 'commit-current');
     pointerCommitted = true;
     barrier('after-current-rename', { generation_id: generationId });
     syncDirectory(operations, bundleRoot, 'commit-current', durability);
     safeUnlink(operations, recoveryPath, 'cleanup-recovery');
-    recoveryCreated = false;
     syncDirectory(operations, bundleRoot, 'cleanup-recovery', durability);
+    recoveryCreated = false;
     return Object.freeze({
       generation_id: generationId,
       reused,
@@ -595,8 +628,26 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
     });
   } catch (error) {
     if (pointerCommitted) {
-      restorePreviousPointer({
-        operations, bundleRoot, currentPath, previous, generationId, recoveryPath, durability,
+      const recoveryBytes = previous ? previous.bytes : Buffer.from('NONE\n', 'utf8');
+      try {
+        ensureRecoveryMaterial({ operations, bundleRoot, recoveryPath, recoveryBytes, durability });
+        recoveryCreated = true;
+      } catch (recoveryError) {
+        if (recoveryError instanceof StationDiagnosticError) throw recoveryError;
+        fail('station-output/commit-rollback-failed', 'CURRENT commit failed and recovery material could not be retained.', {
+          previous_generation_id: previous?.generationId ?? null,
+          candidate_generation_id: generationId,
+        });
+      }
+      if (currentIsCommittedCandidate(operations, currentPath, pointerIdentity, generationId)) {
+        restorePreviousPointer({
+          operations, bundleRoot, currentPath, previous, generationId, recoveryPath, durability,
+        });
+      }
+      fail('station-output/commit-failed', 'CURRENT commit failed after a newer authority replaced the failed candidate; newer authority was preserved.', {
+        previous_generation_id: previous?.generationId ?? null,
+        candidate_generation_id: generationId,
+        recovery_file: path.basename(recoveryPath),
       });
     }
     if (stagingCreated) safeRemoveTree(operations, stagingPath);

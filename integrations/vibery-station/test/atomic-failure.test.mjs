@@ -363,7 +363,7 @@ test('cleanup-recovery fsync failure reports only recovery material that still e
   let diagnostic;
   assert.throws(() => publishStationGeneration(candidate, { operations }), (error) => {
     diagnostic = error.diagnostic;
-    assert.equal(error.code, 'station-output/commit-rollback-failed');
+    assert.equal(error.code, 'station-output/commit-failed');
     return true;
   });
   const declared = [diagnostic.evidence.recovery_file, diagnostic.evidence.failure_marker]
