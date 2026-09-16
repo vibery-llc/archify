@@ -744,11 +744,13 @@ export function gateStationArtifacts(evidenceBytes, mapBytes, readerSession) {
   const expectedMapBytes = canonicalJsonBytes(expectedMap);
   if (!suppliedMap.equals(expectedMapBytes)) mismatch(STATION_SCHEMAS.map, map, expectedMap);
 
+  const acceptedEvidence = Buffer.from(suppliedEvidence);
+  const acceptedMap = Buffer.from(suppliedMap);
   return Object.freeze({
-    evidence_bytes: suppliedEvidence,
-    map_bytes: suppliedMap,
-    evidence_sha256: sha256Hex(suppliedEvidence),
-    map_sha256: sha256Hex(suppliedMap),
+    get evidence_bytes() { return Buffer.from(acceptedEvidence); },
+    get map_bytes() { return Buffer.from(acceptedMap); },
+    evidence_sha256: sha256Hex(acceptedEvidence),
+    map_sha256: sha256Hex(acceptedMap),
     repository: Object.freeze({
       url: expectedEvidence.repository.url,
       revision: expectedEvidence.repository.revision,
