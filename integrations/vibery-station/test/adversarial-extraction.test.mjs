@@ -28,7 +28,8 @@ export const ADVERSARIAL_EXTRACTION_MATRIX = Object.freeze([
   'unsupported-object-format',
   'malformed-tree-protocol', 'incomplete-tree-protocol', 'tree-output-over-budget',
   'manifest-symlink', 'manifest-gitlink', 'manifest-binary-nul', 'manifest-invalid-utf8',
-  'control-character-path', 'invalid-path-shape', 'case-collision', 'unicode-nfc-collision',
+  'control-character-path', 'selected-control-exact', 'selected-control-wildcard',
+  'invalid-path-shape', 'case-collision', 'unicode-nfc-collision',
   'unsupported-glob', 'missing-root-manifest', 'malformed-manifest', 'oversized-manifest',
   'zero-workspace-matches', 'duplicate-package-identity', 'more-than-five-groups',
   'manifest-count-512', 'manifest-count-513',
@@ -395,6 +396,21 @@ test('non-regular, binary, encoding, path-collision, and unsupported workspace i
   } });
   assertCoarse(nfcCollision, ['station-fallback/path-collision']);
   cover('unicode-nfc-collision');
+});
+
+test('selected tab and newline manifest paths produce the typed whole-project fallback for exact and wildcard patterns', () => {
+  const rows = [
+    ['selected-control-exact', 'packages/odd\troom', ['packages/odd\troom']],
+    ['selected-control-wildcard', 'packages/odd\nroom', ['packages/*']],
+  ];
+  for (const [name, root, workspaces] of rows) {
+    const fixture = createGitFixture({ files: {
+      'package.json': json({ name: 'root', workspaces }),
+      [`${root}/package.json`]: json({ name: 'selected-control' }),
+    } });
+    assertCoarse(fixture, ['station-fallback/path-unsupported']);
+    cover(name);
+  }
 });
 
 test('invalid raw path shape remains fully inventoried and cannot produce partial detail', async () => {
