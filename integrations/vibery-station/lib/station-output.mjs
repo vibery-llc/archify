@@ -481,6 +481,25 @@ function inspectFixedLock(operations, bundleRoot) {
   return { state: liveness, owner: parsed.value, bytes: parsed.bytes, stat: parsed.stat };
 }
 
+function rawRegularFileObservation(operations, target, kind) {
+  try {
+    const stat = operations.lstat(target);
+    if (stat.isSymbolicLink() || !stat.isFile()) return null;
+    return { kind, target, stat, bytes: Buffer.from(operations.readFile(target)) };
+  } catch {
+    return null;
+  }
+}
+
+function expectedCommittedBytes(prepared) {
+  return canonicalJsonBytes({
+    schema: COMMITTED_SCHEMA,
+    token: prepared.token,
+    previous_generation_id: prepared.previous_generation_id,
+    candidate_generation_id: prepared.candidate_generation_id,
+  });
+}
+
 function readOptionalTransaction(operations, bundleRoot) {
   const paths = publicationPaths(bundleRoot);
   const records = [];
@@ -491,7 +510,21 @@ function readOptionalTransaction(operations, bundleRoot) {
     if (!exists(operations, target)) continue;
     let parsed;
     try { parsed = exactCanonicalObject(operations, target, `publication ${kind}`); } catch {
-      return { kind: 'invalid', target };
+      const invalidRecord = rawRegularFileObservation(operations, target, kind);
+      const prepared = records.length === 1 && records[0].kind === 'journal' ? records[0] : null;
+      if (kind === 'committed' && prepared && invalidRecord) {
+        const expected = expectedCommittedBytes(prepared.value);
+        if (invalidRecord.bytes.length < expected.length
+            && invalidRecord.bytes.equals(expected.subarray(0, invalidRecord.bytes.length))) {
+          return {
+            kind: 'journal-with-partial-committed',
+            value: prepared.value,
+            records: [prepared, { ...invalidRecord, partial: true }],
+          };
+        }
+        return { kind: 'conflict', value: prepared.value, records: [prepared, invalidRecord] };
+      }
+      return { kind: 'invalid', target, ...(invalidRecord ? { records: [invalidRecord] } : {}) };
     }
     const value = parsed.value;
     const valid = value?.schema === schema && TOKEN_RE.test(value.token || '')
@@ -500,7 +533,13 @@ function readOptionalTransaction(operations, bundleRoot) {
       && Object.keys(value).sort().join('\0') === [
         'candidate_generation_id', 'previous_generation_id', 'schema', 'token',
       ].sort().join('\0');
-    if (!valid) return { kind: 'invalid', target };
+    if (!valid) {
+      const invalidRecord = { kind, target, ...parsed };
+      const prepared = records.length === 1 && records[0].kind === 'journal' ? records[0] : null;
+      return kind === 'committed' && prepared
+        ? { kind: 'conflict', value: prepared.value, records: [prepared, invalidRecord] }
+        : { kind: 'invalid', target, records: [invalidRecord] };
+    }
     records.push({ kind, target, value, ...parsed });
   }
   if (records.length === 0) return null;
@@ -508,7 +547,7 @@ function readOptionalTransaction(operations, bundleRoot) {
     const [prepared, committed] = records;
     const fields = ['token', 'previous_generation_id', 'candidate_generation_id'];
     if (fields.some((field) => prepared.value[field] !== committed.value[field])) {
-      return { kind: 'conflict', records };
+      return { kind: 'conflict', value: prepared.value, records };
     }
     return { kind: 'both', value: prepared.value, records };
   }
@@ -885,15 +924,13 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
     operations.mkdir(bundleRoot, { recursive: true, mode: 0o700 });
     if (!exists(operations, paths.current)) {
       barrier('after-bundle-root-created', { bundle_root: bundleRoot });
-      syncDirectory(operations, publicationParent, 'publish-bundle-root', durability);
-      if (!bundleRootExisted) {
-        const createdParents = [];
-        for (let cursor = path.dirname(bundleRoot); cursor !== publicationParent; cursor = path.dirname(cursor)) {
-          createdParents.unshift(cursor);
-        }
-        for (const createdParent of createdParents) {
-          syncDirectory(operations, createdParent, 'publish-bundle-root-parent-chain', durability);
-        }
+      for (let cursor = path.dirname(bundleRoot);;) {
+        directory(operations, cursor, 'bundle root creation chain');
+        syncDirectory(operations, cursor,
+          cursor === publicationParent ? 'publish-bundle-root' : 'publish-bundle-root-parent-chain', durability);
+        const parent = path.dirname(cursor);
+        if (parent === cursor) break;
+        cursor = parent;
       }
     }
     operations.mkdir(paths.generations, { recursive: true, mode: 0o700 });
