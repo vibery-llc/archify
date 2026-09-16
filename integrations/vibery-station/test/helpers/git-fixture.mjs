@@ -83,3 +83,21 @@ export function recordingRunner(calls, intercept) {
 export function gitObjectId(root, args) {
   return runFixtureGit(root, args);
 }
+
+export function writeBlobObject(root, bytes) {
+  return runFixtureGit(root, ['hash-object', '-w', '--stdin'], { input: bytes });
+}
+
+export function createCommitFromTreeRecords(root, records, { allowMissing = false, message = 'synthetic tree' } = {}) {
+  const ordered = [...records].sort((left, right) => Buffer.compare(left.pathBytes, right.pathBytes));
+  const chunks = [];
+  for (const record of ordered) {
+    chunks.push(Buffer.from(`${record.mode} ${record.type} ${record.oid}\t`, 'ascii'));
+    chunks.push(record.pathBytes);
+    chunks.push(Buffer.from([0]));
+  }
+  const args = ['mktree', '-z', ...(allowMissing ? ['--missing'] : [])];
+  const treeOid = runFixtureGit(root, args, { encoding: null, input: Buffer.concat(chunks) }).toString('utf8').trim();
+  const revision = runFixtureGit(root, ['commit-tree', treeOid], { input: `${message}\n` });
+  return { revision, treeOid };
+}
