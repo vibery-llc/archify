@@ -151,6 +151,61 @@ export function captureRepositoryState(root) {
   });
 }
 
+function packageManifest(name, declarations = {}) {
+  return json({ name, private: true, ...declarations });
+}
+
+export function createTwelveWorkspaceRepository({ groups, repositoryName }) {
+  if (!Array.isArray(groups) || groups.length !== 4
+      || new Set(groups).size !== groups.length
+      || groups.some((group) => typeof group !== 'string' || !/^[a-z][a-z0-9-]*$/.test(group))) {
+    throw new TypeError('Twelve-workspace fixtures require four distinct generic path-segment labels.');
+  }
+  if (typeof repositoryName !== 'string' || !/^[a-z][a-z0-9-]*$/.test(repositoryName)) {
+    throw new TypeError('Fixture repository name must be one safe generic identity segment.');
+  }
+
+  const members = ['alpha', 'beta', 'gamma'];
+  const packageNames = Array.from({ length: 12 }, (_, index) => `unit-${String(index + 1).padStart(2, '0')}`);
+  const declarations = new Map([
+    [0, { dependencies: { [packageNames[9]]: 'workspace:*' } }],
+    [1, { optionalDependencies: { [packageNames[10]]: 'workspace:*' } }],
+    [3, { devDependencies: { [packageNames[9]]: 'workspace:*' } }],
+    [4, { peerDependencies: { [packageNames[11]]: 'workspace:*' } }],
+    [6, {
+      dependencies: { [packageNames[10]]: 'workspace:*' },
+      peerDependencies: { [packageNames[9]]: 'workspace:*' },
+    }],
+    [9, { dependencies: { [packageNames[10]]: 'workspace:*' } }],
+  ]);
+  const files = {
+    'README.md': '# Generic twelve-workspace acceptance fixture\n',
+    'package.json': json({
+      name: 'shape-root',
+      private: true,
+      workspaces: groups.map((group) => `${group}/*`),
+    }),
+  };
+  let packageIndex = 0;
+  for (const group of groups) {
+    for (const member of members) {
+      files[`${group}/${member}/package.json`] = packageManifest(
+        packageNames[packageIndex],
+        declarations.get(packageIndex),
+      );
+      packageIndex += 1;
+    }
+  }
+  const authoredUrl = `https://github.com/Example/${repositoryName}.git`;
+  const fixture = createGitFixture({ origin: authoredUrl, files });
+  return Object.freeze({
+    root: fixture.root,
+    revision: fixture.revision,
+    repositoryUrl: authoredUrl,
+    groups: Object.freeze([...groups]),
+  });
+}
+
 function acceptanceEnvironment(entries) {
   const environment = { ...process.env };
   for (const [key] of entries) delete environment[key];
