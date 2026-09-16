@@ -190,6 +190,18 @@ test('supports both npm workspace forms and exact plus terminal-segment patterns
   }
 });
 
+test('matches a terminal wildcard at the repository root without crossing path segments', async () => {
+  const { buildStationEvidence } = await loadBuilder();
+  const result = buildStationEvidence(fakeReader({
+    'package.json': manifest({ name: 'root', workspaces: ['*'] }),
+    'tool/package.json': manifest({ name: 'tool' }),
+    'nested/deep/package.json': manifest({ name: 'deep' }),
+  }).reader);
+  assert.equal(result.value.analysis.detail_eligible, true);
+  assert.deepEqual(result.value.workspace.package_roots, ['tool']);
+  assert.deepEqual(result.value.packages.map(({ root }) => root), ['.', 'tool']);
+});
+
 test('rejects unsupported, empty, ambiguous, overlapping, and colliding workspace selection as fallback', async () => {
   const { buildStationEvidence } = await loadBuilder();
   const cases = [
