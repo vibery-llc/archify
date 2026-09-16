@@ -392,6 +392,13 @@ function rootsCollide(roots) {
     .some((normalize) => new Set(roots.map(normalize)).size !== roots.length);
 }
 
+function manifestInventoryHasClassification(reader, codes) {
+  const manifestIndexes = new Set(reader.manifestCandidates.map((entry) => reader.inventory.indexOf(entry)));
+  return reader.unsupportedPaths.some(({ code, entryIndex }) => (
+    codes.has(code) && manifestIndexes.has(entryIndex)
+  ));
+}
+
 function selectEntries(reader, patterns) {
   const parsed = patterns.map(parsePattern);
   if (parsed.some((value) => value === null)) {
@@ -525,6 +532,9 @@ function reconstructEvidence(reader) {
     roots = selection.roots;
     provenance = selection.provenance;
     selectionReasons = selection.reasons;
+  }
+  if (manifestInventoryHasClassification(reader, UNSUPPORTED_SELECTED_PATH_CODES)) {
+    selectionReasons.push('station-fallback/path-unsupported');
   }
   const workspace = {
     kind: declaration.kind,
@@ -704,6 +714,79 @@ function reconstructMap(evidence, evidenceBytes) {
     relations,
     fallback: { used: coarse, reason_codes: sortedUnique(reasons, compareFallbackCodes) },
   };
+}
+
+function verifyEvidenceBindings(evidence) {
+  const projectId = deriveProjectId(repositoryIdentity(evidence.repository.url));
+  if (evidence.repository.id !== projectId) {
+    failure('station-gate/evidence-identity-mismatch', 'Evidence repository identity is not derived from its canonical URL.', STATION_SCHEMAS.evidence, '/repository/id');
+  }
+  const filesById = new Map();
+  const filesByPath = new Map();
+  for (const [index, file] of evidence.files.entries()) {
+    if (file.id !== deriveEvidenceId(file.path, file.git_oid)
+        || filesById.has(file.id) || filesByPath.has(file.path)) {
+      failure('station-gate/evidence-identity-mismatch', 'Evidence file identities are not unique exact path/OID derivations.', STATION_SCHEMAS.evidence, `/files/${index}`);
+    }
+    filesById.set(file.id, file);
+    filesByPath.set(file.path, file);
+  }
+  const rootFile = evidence.workspace.root_manifest_evidence_id === null
+    ? null : filesById.get(evidence.workspace.root_manifest_evidence_id);
+  if (rootFile && rootFile.path !== 'package.json') {
+    failure('station-gate/evidence-reference-missing', 'Root manifest evidence must resolve to package.json.', STATION_SCHEMAS.evidence, '/workspace/root_manifest_evidence_id');
+  }
+  if (evidence.analysis.discovered_manifest_count < evidence.analysis.selected_manifest_count
+      || evidence.analysis.represented_manifest_count !== (evidence.analysis.detail_eligible ? evidence.packages.length : 0)) {
+    failure('station-gate/unsupported-claim', 'Evidence analysis counts are internally inconsistent.', STATION_SCHEMAS.evidence, '/analysis');
+  }
+  if (!evidence.analysis.detail_eligible) {
+    if (evidence.workspace.kind !== 'unsupported' || evidence.packages.length !== 0) {
+      failure('station-gate/unsupported-claim', 'Fallback evidence cannot retain detailed package claims.', STATION_SCHEMAS.evidence, '/workspace');
+    }
+    return evidence;
+  }
+  if (!rootFile || evidence.analysis.fallback_reason_codes.length !== 0) {
+    failure('station-gate/evidence-reference-missing', 'Detailed evidence requires one exact root manifest reference.', STATION_SCHEMAS.evidence, '/workspace/root_manifest_evidence_id');
+  }
+  const packagesByRoot = new Map();
+  const packageNames = new Set();
+  for (const [index, packageValue] of evidence.packages.entries()) {
+    const file = filesById.get(packageValue.manifest_evidence_id);
+    const expectedPath = packageValue.root === '.' ? 'package.json' : `${packageValue.root}/package.json`;
+    if (!file || file.path !== expectedPath || packagesByRoot.has(packageValue.root) || packageNames.has(packageValue.name)) {
+      failure('station-gate/evidence-reference-missing', 'Every detailed package must resolve uniquely to its root manifest evidence.', STATION_SCHEMAS.evidence, `/packages/${index}/manifest_evidence_id`);
+    }
+    if (packageValue.root === '.') {
+      if (packageValue.workspace_pattern !== ROOT_MARKER) {
+        failure('station-gate/unsupported-claim', 'The root package must use root-package provenance.', STATION_SCHEMAS.evidence, `/packages/${index}/workspace_pattern`);
+      }
+    } else if (!evidence.workspace.patterns.includes(packageValue.workspace_pattern)) {
+      failure('station-gate/unsupported-claim', 'Workspace package provenance must name one declared pattern.', STATION_SCHEMAS.evidence, `/packages/${index}/workspace_pattern`);
+    }
+    packagesByRoot.set(packageValue.root, packageValue);
+    packageNames.add(packageValue.name);
+  }
+  const expectedRoots = evidence.workspace.kind === 'root-package'
+    ? ['.'] : ['.', ...evidence.workspace.package_roots];
+  if (evidence.workspace.kind === 'unsupported'
+      || !sameJson([...packagesByRoot.keys()].sort(compareCodePoints), expectedRoots.sort(compareCodePoints))
+      || (evidence.workspace.kind === 'root-package' && evidence.workspace.patterns.length !== 0)) {
+    failure('station-gate/unsupported-claim', 'Detailed package roots do not exactly represent the workspace declaration.', STATION_SCHEMAS.evidence, '/workspace/package_roots');
+  }
+  return evidence;
+}
+
+export function verifyStationMapFromEvidence(evidenceBytes, mapBytes) {
+  const suppliedEvidence = Buffer.isBuffer(evidenceBytes) ? Buffer.from(evidenceBytes) : evidenceBytes;
+  const suppliedMap = Buffer.isBuffer(mapBytes) ? Buffer.from(mapBytes) : mapBytes;
+  const evidence = exactJson(suppliedEvidence, STATION_SCHEMAS.evidence, validateStationEvidence);
+  const map = exactJson(suppliedMap, STATION_SCHEMAS.map, validateStationMap);
+  verifyEvidenceBindings(evidence);
+  const expectedMap = reconstructMap(evidence, suppliedEvidence);
+  validateStationMap(expectedMap);
+  if (!sameJson(map, expectedMap)) mismatch(STATION_SCHEMAS.map, map, expectedMap);
+  return Object.freeze({ evidence, map: expectedMap });
 }
 
 function firstDifference(actual, expected, path = '') {

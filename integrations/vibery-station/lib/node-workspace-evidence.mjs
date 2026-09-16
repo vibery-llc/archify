@@ -235,6 +235,13 @@ function selectedHasReaderClassification(reader, selectedEntries, codes) {
   ));
 }
 
+function manifestInventoryHasReaderClassification(reader, codes) {
+  const manifestIndexes = new Set(reader.manifestCandidates.map((entry) => reader.inventory.indexOf(entry)));
+  return reader.unsupportedPaths.some(({ code, entryIndex }) => (
+    codes.has(code) && manifestIndexes.has(entryIndex)
+  ));
+}
+
 function selectWorkspaceEntries(reader, patterns) {
   const parsedPatterns = patterns.map(parsePattern);
   if (parsedPatterns.some((pattern) => pattern === null)) {
@@ -384,6 +391,9 @@ export function buildStationEvidence(reader) {
     roots = selection.roots;
     provenance = selection.provenance;
     selectionReasons = selection.reasons;
+  }
+  if (manifestInventoryHasReaderClassification(reader, UNSUPPORTED_SELECTED_PATH_CODES)) {
+    selectionReasons.push('station-fallback/path-unsupported');
   }
 
   const workspace = {

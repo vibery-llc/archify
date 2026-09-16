@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
-import { parseRepositoryRemote, redactRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
+import { parseRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import { throwStationDiagnostic } from './diagnostics.mjs';
 
 const FULL_OID_RE = /^[a-f0-9]{40}$/;
@@ -116,6 +116,13 @@ function resolveTopLevel(repoRoot) {
   }
 }
 
+function redactStationRemote(value) {
+  return String(value || '')
+    .replace(/^((?:https?|ssh):\/\/)[^/]*@/i, '$1REDACTED@')
+    .replace(/^[^/@:]+:[^@/]+@(?=[^/:]+:)/, 'REDACTED@')
+    .replace(/[?#].*$/s, '?REDACTED');
+}
+
 function validateRepositoryIdentity(runGit, repositoryUrl) {
   const authored = parseRepositoryRemote(repositoryUrl, { authored: true });
   if (!authored) {
@@ -132,7 +139,7 @@ function validateRepositoryIdentity(runGit, repositoryUrl) {
   const origin = parseRepositoryRemote(originValue);
   if (!origin || origin.identity !== authored.identity) {
     fail('station-extract/origin-mismatch', 'Repository origin does not match the authored identity.', {
-      evidence: { localOrigin: redactRepositoryRemote(originValue) },
+      evidence: { localOrigin: redactStationRemote(originValue) },
       supportedFixes: ['use the matching local repository or correct the authored repository URL'],
     });
   }

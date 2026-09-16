@@ -308,32 +308,37 @@ test('temporary pointer write/fsync, pointer rename, and post-rename bundle fsyn
   cover('bundle-root-fsync');
 });
 
-test('two publishers interleave without an older candidate replacing newer authority', () => {
+test('two publishers cannot both pass the final authority check', () => {
   const state = seeded();
   const candidateA = nextCandidate(state.fixture, state.bundleRoot, 'publisher-a');
   const candidateB = nextCandidate(state.fixture, state.bundleRoot, 'publisher-b');
-  let publicationB;
-  expectCode('station-output/path-invalid', () => publishStationGeneration(candidateA, {
+  let excluded = false;
+  const publicationA = publishStationGeneration(candidateA, {
     barrier(name) {
-      if (name === 'before-current-rename') publicationB = publishStationGeneration(candidateB);
+      if (name !== 'after-final-current-check') return;
+      expectCode('station-output/publication-busy', () => publishStationGeneration(candidateB));
+      excluded = true;
     },
-  }));
-  assert.ok(publicationB);
+  });
+  assert.equal(excluded, true);
+  assert.equal(snapshotAuthority(state.bundleRoot).generation_id, publicationA.generation_id);
+  const publicationB = publishStationGeneration(candidateB);
   const current = snapshotAuthority(state.bundleRoot);
   assert.equal(current.generation_id, publicationB.generation_id);
   assert.deepEqual(current, { generation_id: publicationB.generation_id, ...exactGeneration(candidateB) });
   cover('publisher-publisher-interleaving');
 });
 
-test('post-rename fsync failure preserves a newer publisher instead of restoring stale authority', () => {
+test('post-rename rollback excludes another publisher until prior authority is restored', () => {
   const state = seeded();
   const candidateA = nextCandidate(state.fixture, state.bundleRoot, 'failed-publisher');
   const candidateB = nextCandidate(state.fixture, state.bundleRoot, 'newer-publisher');
-  let publicationB;
+  let excluded = false;
   const operations = createStationOutputOperations({
     fsyncDirectory(target, phase) {
       if (target === state.bundleRoot && phase === 'commit-current') {
-        publicationB = publishStationGeneration(candidateB);
+        expectCode('station-output/publication-busy', () => publishStationGeneration(candidateB));
+        excluded = true;
         throw new Error('synthetic failed-publisher fsync');
       }
       const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
@@ -341,7 +346,9 @@ test('post-rename fsync failure preserves a newer publisher instead of restoring
     },
   });
   expectCode('station-output/commit-failed', () => publishStationGeneration(candidateA, { operations }));
-  assert.ok(publicationB);
+  assert.equal(excluded, true);
+  assertExactAuthority(state.old, state.bundleRoot, 'serialized rollback');
+  const publicationB = publishStationGeneration(candidateB);
   const current = snapshotAuthority(state.bundleRoot);
   assert.equal(current.generation_id, publicationB.generation_id);
   assert.deepEqual(current, { generation_id: publicationB.generation_id, ...exactGeneration(candidateB) });
@@ -507,13 +514,15 @@ test('child termination immediately before and after CURRENT rename selects only
       state.fixture.root, state.fixture.repositoryUrl, state.fixture.revision, state.bundleRoot, 'KILL', 'unused',
     ], { encoding: 'utf8', shell: false });
     assert.equal(child.signal, 'SIGKILL', `${event}: ${child.stderr}`);
-    const current = snapshotAuthority(state.bundleRoot);
     if (expectation === 'old') {
       assertExactAuthority(state.old, state.bundleRoot, row);
     } else {
-      assert.deepEqual(current.evidenceBytes, newer.evidenceBytes);
-      assert.deepEqual(current.mapBytes, newer.mapBytes);
-      assert.deepEqual(current.receiptBytes, newer.receiptBytes);
+      expectCode('station-output/recovery-required', () => readStationGeneration(state.bundleRoot));
+      const generationId = fs.readFileSync(path.join(state.bundleRoot, 'CURRENT'), 'utf8').trim();
+      const generation = path.join(state.bundleRoot, 'generations', generationId);
+      assert.deepEqual(fs.readFileSync(path.join(generation, 'station-evidence.json')), newer.evidenceBytes);
+      assert.deepEqual(fs.readFileSync(path.join(generation, 'station-map.json')), newer.mapBytes);
+      assert.deepEqual(fs.readFileSync(path.join(generation, 'station-receipt.json')), newer.receiptBytes);
     }
     cover(row);
   }

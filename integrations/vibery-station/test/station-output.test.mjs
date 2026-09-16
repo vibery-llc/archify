@@ -342,13 +342,15 @@ test('abrupt child termination immediately before and after pointer rename selec
       encoding: 'utf8', shell: false,
     });
     assert.equal(child.signal, 'SIGKILL', `${event}: ${child.stderr}`);
-    const current = readStationGeneration(bundleRoot);
     if (expected === 'old') {
+      const current = readStationGeneration(bundleRoot);
       assert.equal(current.generation_id, old.generation_id);
       assert.deepEqual(current.receiptBytes, oldCandidate.receiptBytes);
     } else {
-      assert.notEqual(current.generation_id, old.generation_id);
-      assert.deepEqual(current.receiptBytes, newer.receiptBytes);
+      expectCode('station-output/recovery-required', () => readStationGeneration(bundleRoot));
+      const generationId = fs.readFileSync(path.join(bundleRoot, 'CURRENT'), 'utf8').trim();
+      assert.notEqual(generationId, old.generation_id);
+      assert.deepEqual(fs.readFileSync(artifactPaths(bundleRoot, generationId).receipt), newer.receiptBytes);
     }
   }
 });

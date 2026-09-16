@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
 import { canonicalFuturePath, pathsAlias } from '../../../archify/renderers/shared/output-path.mjs';
-import { parseRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import { canonicalJsonBytes, sha256Hex } from './canonical-json.mjs';
 import {
   STATION_CONTRACT_VERSION,
@@ -12,14 +11,7 @@ import {
   validateStationMap,
 } from './contracts.mjs';
 import { createStationDiagnostic, StationDiagnosticError } from './diagnostics.mjs';
-import {
-  deriveEvidenceId,
-  deriveProjectId,
-  deriveRelationId,
-  deriveRoomId,
-  deriveSnapshotId,
-} from './identity.mjs';
-import { gateStationArtifacts } from './station-gate.mjs';
+import { gateStationArtifacts, verifyStationMapFromEvidence } from './station-gate.mjs';
 
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
 const GENERATION_RE = /^generation-[a-f0-9]{64}$/;
@@ -31,7 +23,9 @@ const ARTIFACT_FILES = Object.freeze([
 const DIRECTORY_FSYNC_UNSUPPORTED = new Set(['EINVAL', 'ENOTSUP', 'ENOSYS']);
 const WINDOWS_DIRECTORY_FSYNC_UNSUPPORTED = new Set(['EISDIR', 'EPERM']);
 const RECOVERY_FILE_RE = /^CURRENT\.recovery-(generation-[a-f0-9]{64})$/;
+const RECOVERY_CLEANUP_RE = /^CURRENT\.cleanup-pending-(generation-[a-f0-9]{64})$/;
 const ROLLBACK_FAILURE_RE = /^CURRENT\.rollback-failed-(generation-[a-f0-9]{64})$/;
+const PUBLICATION_LOCK_NAME = '.station-publication.lock';
 let temporarySequence = 0;
 
 function fsyncUnsupported(error) {
@@ -73,6 +67,7 @@ const BASE_OPERATIONS = Object.freeze({
   rename: (source, target) => fs.renameSync(source, target),
   unlink: (target) => fs.unlinkSync(target),
   removeTree: (target) => fs.rmSync(target, { recursive: true, force: true }),
+  removeDirectory: (target) => fs.rmdirSync(target),
   fsyncDirectory(target) {
     const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
     try {
@@ -243,8 +238,8 @@ function verifyGenerationFiles(operations, generationPath, expected) {
 
 function validateResolvedContents(contents, generationId) {
   const code = 'station-output/pointer-invalid';
-  const evidence = strictJson(contents.evidenceBytes, STATION_SCHEMAS.evidence, validateStationEvidence, code);
-  const map = strictJson(contents.mapBytes, STATION_SCHEMAS.map, validateStationMap, code);
+  strictJson(contents.evidenceBytes, STATION_SCHEMAS.evidence, validateStationEvidence, code);
+  strictJson(contents.mapBytes, STATION_SCHEMAS.map, validateStationMap, code);
   const receipt = strictJson(contents.receiptBytes, STATION_SCHEMAS.receipt, validateStationExtractionReceipt, code);
   const hashes = {
     evidence: sha256Hex(contents.evidenceBytes),
@@ -255,73 +250,40 @@ function validateResolvedContents(contents, generationId) {
     fail(code, 'CURRENT generation ID does not authenticate its exact artifact bytes.');
   }
 
-  let projectId;
+  let verified;
   try {
-    const location = parseRepositoryRemote(evidence.repository.url, { authored: true });
-    if (!location) throw new Error('repository identity unavailable');
-    projectId = deriveProjectId(location.identity);
-    for (const file of evidence.files) {
-      if (file.id !== deriveEvidenceId(file.path, file.git_oid)) throw new Error('evidence identity mismatch');
-    }
-    for (const room of map.rooms) {
-      if (room.id !== deriveRoomId(projectId, room.structural_key)) throw new Error('room identity mismatch');
-    }
-    for (const relation of map.relations) {
-      if (relation.id !== deriveRelationId(relation.from_room_id, relation.to_room_id)) {
-        throw new Error('relation identity mismatch');
-      }
-    }
-    if (map.snapshot.id !== deriveSnapshotId(
-      projectId,
-      evidence.repository.revision,
-      hashes.evidence,
-      evidence.extractor.profile,
-    )) throw new Error('snapshot identity mismatch');
+    verified = verifyStationMapFromEvidence(contents.evidenceBytes, contents.mapBytes);
   } catch {
-    fail(code, 'CURRENT generation contains inconsistent derived identities.');
+    fail(code, 'CURRENT generation map is not the complete deterministic projection of its evidence.');
   }
-
-  const same = (left, right) => canonicalJsonBytes(left).equals(canonicalJsonBytes(right));
-  const evidenceIds = new Set(evidence.files.map(({ id }) => id));
-  const roomIds = new Set(map.rooms.map(({ id }) => id));
-  const referencesResolve = evidence.packages.every(({ manifest_evidence_id: id }) => evidenceIds.has(id))
-    && (evidence.workspace.root_manifest_evidence_id === null
-      || evidenceIds.has(evidence.workspace.root_manifest_evidence_id))
-    && map.rooms.every((room) => room.project_id === projectId
-      && room.evidence_ids.every((id) => evidenceIds.has(id)))
-    && map.relations.every((relation) => roomIds.has(relation.from_room_id)
-      && roomIds.has(relation.to_room_id)
-      && relation.evidence_ids.every((id) => evidenceIds.has(id)));
-  const repository = {
-    url: evidence.repository.url,
-    revision: evidence.repository.revision,
-    tree_oid: evidence.repository.tree_oid,
-    object_format: evidence.repository.object_format,
+  const expectedReceipt = {
+    schema: STATION_SCHEMAS.receipt,
+    ok: true,
+    command: 'station extract',
+    repository: {
+      url: verified.evidence.repository.url,
+      revision: verified.evidence.repository.revision,
+      tree_oid: verified.evidence.repository.tree_oid,
+      object_format: verified.evidence.repository.object_format,
+    },
+    extractor: verified.evidence.extractor,
+    artifacts: {
+      evidence: { file: 'station-evidence.json', sha256: hashes.evidence, bytes: contents.evidenceBytes.length },
+      map: { file: 'station-map.json', sha256: hashes.map, bytes: contents.mapBytes.length },
+    },
+    result: {
+      project_id: verified.map.project.id,
+      snapshot_id: verified.map.snapshot.id,
+      mode: verified.map.snapshot.mode,
+      rooms: verified.map.rooms.length,
+      relations: verified.map.relations.length,
+      fallback: verified.map.fallback.used,
+      fallback_reason_codes: verified.map.fallback.reason_codes,
+    },
+    diagnostics: [],
   };
-  const expectedResult = {
-    project_id: projectId,
-    snapshot_id: map.snapshot.id,
-    mode: map.snapshot.mode,
-    rooms: map.rooms.length,
-    relations: map.relations.length,
-    fallback: map.fallback.used,
-    fallback_reason_codes: map.fallback.reason_codes,
-  };
-  if (!referencesResolve
-      || evidence.repository.id !== projectId
-      || map.project.id !== projectId
-      || map.snapshot.project_id !== projectId
-      || map.snapshot.revision !== evidence.repository.revision
-      || map.snapshot.profile !== evidence.extractor.profile
-      || map.snapshot.evidence_sha256 !== hashes.evidence
-      || !same(receipt.repository, repository)
-      || !same(receipt.extractor, evidence.extractor)
-      || !same(receipt.result, expectedResult)
-      || receipt.artifacts.evidence.sha256 !== hashes.evidence
-      || receipt.artifacts.evidence.bytes !== contents.evidenceBytes.length
-      || receipt.artifacts.map.sha256 !== hashes.map
-      || receipt.artifacts.map.bytes !== contents.mapBytes.length) {
-    fail(code, 'CURRENT generation receipt, evidence, and map bindings are inconsistent.');
+  if (!canonicalJsonBytes(receipt).equals(canonicalJsonBytes(expectedReceipt))) {
+    fail(code, 'CURRENT generation receipt does not bind every exact evidence and map claim.');
   }
   return receipt;
 }
@@ -386,16 +348,27 @@ function recoveryState(operations, bundleRoot) {
   const names = operations.readdir(bundleRoot);
   const failureMarkers = names.filter((name) => ROLLBACK_FAILURE_RE.test(name)).sort();
   const recoveryFiles = names.filter((name) => RECOVERY_FILE_RE.test(name)).sort();
-  return { failureMarkers, recoveryFiles };
+  const cleanupMarkers = names.filter((name) => RECOVERY_CLEANUP_RE.test(name)).sort();
+  return { failureMarkers, recoveryFiles, cleanupMarkers };
 }
 
-function assertNoUnresolvedRecovery(operations, bundleRoot) {
+function markerGeneration(name) {
+  return RECOVERY_FILE_RE.exec(name)?.[1]
+    || RECOVERY_CLEANUP_RE.exec(name)?.[1]
+    || ROLLBACK_FAILURE_RE.exec(name)?.[1]
+    || null;
+}
+
+function assertNoUnresolvedRecovery(operations, bundleRoot, { currentGenerationId } = {}) {
   const state = recoveryState(operations, bundleRoot);
-  if (state.failureMarkers.length) {
-    fail('station-output/recovery-required', 'Bundle contains a rollback-failure marker requiring deterministic manual inspection.', {
+  const unresolved = [...state.failureMarkers, ...state.recoveryFiles, ...state.cleanupMarkers]
+    .filter((name) => currentGenerationId === undefined || markerGeneration(name) === currentGenerationId);
+  if (unresolved.length) {
+    fail('station-output/recovery-required', 'Bundle contains transaction recovery material requiring deterministic manual inspection.', {
       failure_markers: state.failureMarkers,
       recovery_files: state.recoveryFiles,
-    }, ['follow the retained recovery marker, verify CURRENT once, and preserve every immutable generation']);
+      cleanup_markers: state.cleanupMarkers,
+    }, ['follow the retained recovery material, verify CURRENT once, and preserve every immutable generation']);
   }
 }
 
@@ -429,11 +402,33 @@ function ensureRecoveryMaterial({
   syncDirectory(operations, bundleRoot, 'retain-recovery', durability);
 }
 
-function currentIsCommittedCandidate(operations, currentPath, pointerIdentity, generationId) {
+function inspectCommittedCurrent(operations, currentPath, pointerIdentity, generationId) {
   try {
     const current = regularFile(operations, currentPath, 'CURRENT');
-    return sameIdentity(current, pointerIdentity)
-      && Buffer.from(operations.readFile(currentPath)).equals(Buffer.from(`${generationId}\n`, 'utf8'));
+    const bytes = Buffer.from(operations.readFile(currentPath));
+    return {
+      status: sameIdentity(current, pointerIdentity)
+        && bytes.equals(Buffer.from(`${generationId}\n`, 'utf8')) ? 'candidate' : 'different',
+    };
+  } catch (error) {
+    return { status: 'inspection-error', error };
+  }
+}
+
+function retainRollbackFailureMarker({
+  operations, bundleRoot, failureMarker, previous, generationId, recoveryPath, durability,
+}) {
+  try {
+    if (!exists(operations, failureMarker)) {
+      writeExclusive(operations, failureMarker, canonicalJsonBytes({
+        code: 'station-output/commit-rollback-failed',
+        candidate_generation_id: generationId,
+        previous_generation_id: previous?.generationId ?? null,
+        recovery_file: path.basename(recoveryPath),
+      }));
+      syncDirectory(operations, bundleRoot, 'retain-rollback-failure', durability);
+    }
+    return exists(operations, failureMarker);
   } catch {
     return false;
   }
@@ -454,20 +449,9 @@ function restorePreviousPointer({
     syncDirectory(operations, bundleRoot, 'restore-current', durability);
   } catch {
     const failureMarker = path.join(bundleRoot, `CURRENT.rollback-failed-${generationId}`);
-    try {
-      if (!exists(operations, failureMarker)) {
-        writeExclusive(operations, failureMarker, canonicalJsonBytes({
-          code: 'station-output/commit-rollback-failed',
-          candidate_generation_id: generationId,
-          previous_generation_id: previous?.generationId ?? null,
-          recovery_file: path.basename(recoveryPath),
-        }));
-        syncDirectory(operations, bundleRoot, 'retain-rollback-failure', durability);
-      }
-    } catch {
-      // The retained recovery file and immutable generations remain primary material.
-    }
-    const markerExists = exists(operations, failureMarker);
+    const markerExists = retainRollbackFailureMarker({
+      operations, bundleRoot, failureMarker, previous, generationId, recoveryPath, durability,
+    });
     fail('station-output/commit-rollback-failed', 'CURRENT commit failed and prior authority could not be durably restored.', {
       previous_generation_id: previous?.generationId ?? null,
       candidate_generation_id: generationId,
@@ -478,10 +462,19 @@ function restorePreviousPointer({
         : 'atomically remove CURRENT',
     }, ['use the retained recovery file to restore CURRENT; do not delete either immutable generation']);
   }
-  fail('station-output/commit-failed', 'CURRENT commit durability failed; prior authority was restored with recovery material retained.', {
+  if (!RECOVERY_CLEANUP_RE.test(path.basename(recoveryPath))) {
+    try {
+      safeUnlink(operations, recoveryPath, 'cleanup-restored-recovery');
+      safeUnlink(operations, path.join(bundleRoot, `CURRENT.rollback-failed-${generationId}`), 'cleanup-restored-marker');
+      syncDirectory(operations, bundleRoot, 'cleanup-restored-recovery', durability);
+    } catch {
+      // Prior authority is already restored; retained material safely blocks a later publisher if cleanup failed.
+    }
+  }
+  fail('station-output/commit-failed', 'CURRENT commit durability failed; prior authority was restored.', {
     previous_generation_id: previous?.generationId ?? null,
     candidate_generation_id: generationId,
-    recovery_file: path.basename(recoveryPath),
+    ...(exists(operations, recoveryPath) ? { recovery_file: path.basename(recoveryPath) } : {}),
   });
 }
 
@@ -495,10 +488,12 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
   const generationsPath = canonicalAuthored(path.join(bundleRoot, 'generations'), 'generations');
   const generationPath = canonicalAuthored(path.join(generationsPath, generationId), 'candidate generation');
   const currentPath = canonicalAuthored(path.join(bundleRoot, 'CURRENT'), 'CURRENT');
+  const lockPath = canonicalAuthored(path.join(bundleRoot, PUBLICATION_LOCK_NAME), 'publication lock');
   const protectedTargets = [
     ['generations', generationsPath],
     ['candidate generation', generationPath],
     ['CURRENT', currentPath],
+    ['publication lock', lockPath],
   ];
   assertProtectedPaths(bundleRoot, protectedTargets, candidate.protectedPaths);
 
@@ -510,19 +505,37 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
   }
   const bundleIdentity = directory(operations, bundleRoot, 'bundle root');
   const generationsIdentity = directory(operations, generationsPath, 'generations');
-  assertNoUnresolvedRecovery(operations, bundleRoot);
-  if (exists(operations, generationPath)) verifyGenerationFiles(operations, generationPath, candidate);
+  let lockIdentity;
+  try {
+    operations.mkdir(lockPath, { recursive: false, mode: 0o700 });
+    lockIdentity = directory(operations, lockPath, 'publication lock');
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      fail('station-output/publication-busy', 'Another publisher holds the bundle publication lock.', {
+        lock: PUBLICATION_LOCK_NAME,
+      }, ['retry only after the active publisher exits or the stale lock is manually verified']);
+    }
+    if (error instanceof StationDiagnosticError) throw error;
+    fail('station-output/path-invalid', 'Publication lock could not be acquired safely.');
+  }
+  try {
+    assertNoUnresolvedRecovery(operations, bundleRoot);
+    if (exists(operations, generationPath)) verifyGenerationFiles(operations, generationPath, candidate);
   const previous = readPreviousPointer(operations, bundleRoot, generationsPath, currentPath);
   temporarySequence += 1;
   const suffix = `${process.pid}-${temporarySequence}`;
   const stagingPath = path.join(generationsPath, `.station-stage-${generationId}-${suffix}`);
   const pointerPath = path.join(bundleRoot, `.CURRENT.candidate-${generationId}-${suffix}`);
   const recoveryPath = path.join(bundleRoot, `CURRENT.recovery-${generationId}`);
+  const recoveryCleanupPath = path.join(bundleRoot, `CURRENT.cleanup-pending-${generationId}`);
+  const failureMarker = path.join(bundleRoot, `CURRENT.rollback-failed-${generationId}`);
   assertProtectedPaths(bundleRoot, [
     ...protectedTargets,
     ['staging generation', stagingPath],
     ['pointer candidate', pointerPath],
     ['pointer recovery', recoveryPath],
+    ['pointer recovery cleanup', recoveryCleanupPath],
+    ['rollback failure marker', failureMarker],
   ], candidate.protectedPaths);
   const durability = { unsupported: false };
   let stagingCreated = false;
@@ -530,6 +543,7 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
   let pointerCommitted = false;
   let pointerIdentity;
   let recoveryCreated = false;
+  let failureMarkerCreated = false;
   let reused = false;
 
   try {
@@ -580,6 +594,13 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
     writeExclusive(operations, recoveryPath, recoveryBytes);
     const recoveryIdentity = regularFile(operations, recoveryPath, 'pointer recovery');
     recoveryCreated = true;
+    writeExclusive(operations, failureMarker, canonicalJsonBytes({
+      code: 'station-output/commit-rollback-failed',
+      candidate_generation_id: generationId,
+      previous_generation_id: previous?.generationId ?? null,
+      recovery_file: path.basename(recoveryPath),
+    }));
+    failureMarkerCreated = true;
     syncDirectory(operations, bundleRoot, 'prepare-current', durability);
     barrier('before-current-rename', { generation_id: generationId });
 
@@ -611,13 +632,17 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
     assertCurrentStillPreflighted();
     barrier('after-current-recheck', { generation_id: generationId });
     assertCurrentStillPreflighted();
+    barrier('after-final-current-check', { generation_id: generationId });
     operations.rename(pointerPath, currentPath, 'commit-current');
     pointerCommitted = true;
     barrier('after-current-rename', { generation_id: generationId });
     syncDirectory(operations, bundleRoot, 'commit-current', durability);
-    safeUnlink(operations, recoveryPath, 'cleanup-recovery');
-    syncDirectory(operations, bundleRoot, 'cleanup-recovery', durability);
+    operations.rename(recoveryPath, recoveryCleanupPath, 'stage-recovery-cleanup');
     recoveryCreated = false;
+    syncDirectory(operations, bundleRoot, 'cleanup-recovery', durability);
+    safeUnlink(operations, recoveryCleanupPath, 'cleanup-recovery');
+    safeUnlink(operations, failureMarker, 'cleanup-failure-marker');
+    failureMarkerCreated = false;
     return Object.freeze({
       generation_id: generationId,
       reused,
@@ -629,25 +654,39 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
   } catch (error) {
     if (pointerCommitted) {
       const recoveryBytes = previous ? previous.bytes : Buffer.from('NONE\n', 'utf8');
-      try {
-        ensureRecoveryMaterial({ operations, bundleRoot, recoveryPath, recoveryBytes, durability });
-        recoveryCreated = true;
-      } catch (recoveryError) {
-        if (recoveryError instanceof StationDiagnosticError) throw recoveryError;
-        fail('station-output/commit-rollback-failed', 'CURRENT commit failed and recovery material could not be retained.', {
-          previous_generation_id: previous?.generationId ?? null,
-          candidate_generation_id: generationId,
-        });
+      let retainedRecoveryPath = exists(operations, recoveryCleanupPath) ? recoveryCleanupPath : recoveryPath;
+      if (!exists(operations, retainedRecoveryPath)) {
+        try {
+          ensureRecoveryMaterial({ operations, bundleRoot, recoveryPath, recoveryBytes, durability });
+          recoveryCreated = true;
+          retainedRecoveryPath = recoveryPath;
+        } catch {
+          const markerExists = retainRollbackFailureMarker({
+            operations, bundleRoot, failureMarker, previous, generationId, recoveryPath, durability,
+          });
+          fail('station-output/commit-rollback-failed', 'CURRENT commit failed and recovery material could not be recreated.', {
+            previous_generation_id: previous?.generationId ?? null,
+            candidate_generation_id: generationId,
+            ...(markerExists ? { failure_marker: path.basename(failureMarker) } : {}),
+          });
+        }
       }
-      if (currentIsCommittedCandidate(operations, currentPath, pointerIdentity, generationId)) {
+      const inspection = inspectCommittedCurrent(operations, currentPath, pointerIdentity, generationId);
+      if (inspection.status === 'candidate') {
         restorePreviousPointer({
-          operations, bundleRoot, currentPath, previous, generationId, recoveryPath, durability,
+          operations, bundleRoot, currentPath, previous, generationId, recoveryPath: retainedRecoveryPath, durability,
         });
       }
-      fail('station-output/commit-failed', 'CURRENT commit failed after a newer authority replaced the failed candidate; newer authority was preserved.', {
+      const markerExists = retainRollbackFailureMarker({
+        operations, bundleRoot, failureMarker, previous, generationId, recoveryPath: retainedRecoveryPath, durability,
+      });
+      fail('station-output/commit-rollback-failed', inspection.status === 'inspection-error'
+        ? 'CURRENT could not be inspected after candidate rename; recovery is required.'
+        : 'CURRENT differed after candidate rename; authority was not overwritten and recovery is required.', {
         previous_generation_id: previous?.generationId ?? null,
         candidate_generation_id: generationId,
-        recovery_file: path.basename(recoveryPath),
+        recovery_file: path.basename(retainedRecoveryPath),
+        ...(markerExists ? { failure_marker: path.basename(failureMarker) } : {}),
       });
     }
     if (stagingCreated) safeRemoveTree(operations, stagingPath);
@@ -655,8 +694,26 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
     if (recoveryCreated) {
       try { safeUnlink(operations, recoveryPath, 'cleanup-recovery'); } catch { /* retain on cleanup failure */ }
     }
+    if (failureMarkerCreated) {
+      try { safeUnlink(operations, failureMarker, 'cleanup-failure-marker'); } catch { /* retain on cleanup failure */ }
+    }
     if (error instanceof StationDiagnosticError) throw error;
     fail('station-output/commit-failed', 'Immutable generation publication failed before CURRENT commit.');
+    }
+  } finally {
+    try {
+      if (!sameIdentity(directory(operations, lockPath, 'publication lock'), lockIdentity)) {
+        fail('station-output/recovery-required', 'Publication lock identity changed while held.', {
+          lock: PUBLICATION_LOCK_NAME,
+        });
+      }
+      operations.removeDirectory(lockPath, 'release-publication-lock');
+    } catch (error) {
+      if (error instanceof StationDiagnosticError) throw error;
+      fail('station-output/recovery-required', 'Publication lock could not be released; manual inspection is required.', {
+        lock: PUBLICATION_LOCK_NAME,
+      });
+    }
   }
 }
 
@@ -668,10 +725,10 @@ export function readStationGeneration(bundleRootInput, { operations: suppliedOpe
   const generationsPath = canonicalAuthored(path.join(bundleRoot, 'generations'), 'generations');
   const currentPath = canonicalAuthored(path.join(bundleRoot, 'CURRENT'), 'CURRENT');
   directory(operations, bundleRoot, 'bundle root');
-  assertNoUnresolvedRecovery(operations, bundleRoot, { readers: true });
   regularFile(operations, currentPath, 'CURRENT');
   const pointerBytes = Buffer.from(operations.readFile(currentPath));
   const generationId = parsePointer(pointerBytes);
+  assertNoUnresolvedRecovery(operations, bundleRoot, { currentGenerationId: generationId });
   directory(operations, generationsPath, 'generations');
   const generationPath = canonicalAuthored(path.join(generationsPath, generationId), 'current generation');
   const contents = verifyGenerationFiles(operations, generationPath);
