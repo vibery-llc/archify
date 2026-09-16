@@ -52,10 +52,11 @@ patterns-established:
   - "Isolation acceptance combines dynamic blockers, static import edges, child-command audit, baseline Git diff, default CLI smoke, and archive object/hash identity."
 
 requirements-completed: [BOUND-01, TEST-02]
-verification_status: architecture-remediation-verification-pending
+verification_status: passed
 remediation_started: 2026-09-16T18:42:53Z
 remediation_completed: 2026-09-16T19:36:27Z
 architecture_remediation_started: 2026-09-16T20:00:00Z
+architecture_remediation_completed: 2026-09-16T22:00:00Z
 
 duration: 16 min
 completed: 2026-09-16
@@ -79,6 +80,18 @@ The final architecture decision replaces the earlier bundle-self-authentication 
 6. SCP diagnostics redact both username-only and username/password userinfo. The CLI exposes committed-recovery-required as successful committed replacement state and authority-indeterminate as a typed publication failure state.
 
 Executable coverage includes coherent replacement anchors; regular hard-link lock shape; live, stale, reused PID, EPERM, and EIO owner states; two-publisher exclusion; SIGKILL before/after rename; rename ambiguity; post-commit fsync/cleanup/release failure; interrupted recovery; mandatory file fsync; directory-fsync downgrade; 512/513 pattern boundaries; root aliases; candidate-only matching over a 20,000-file non-manifest inventory; and valid-root traversal/non-UTF-8 candidates.
+
+Final verification passed: 153/153 Station tests with zero skips, 8/8 isolation tests, syntax checks for every integration `.mjs`, JSON parsing for every integration schema, scope and diff checks limited to `integrations/vibery-station/` plus `.planning/`, default CLI help/inspect smoke, unchanged default/core surfaces, unchanged `archify.zip` object `f7fdf0f866c0d15385a81503e92e8bbbc4d81582`, and unchanged archive SHA-256 `2657acf353d3fadfde472b2c799eb9a1fa3a3b344129066980b9b1c5935f0883`.
+
+### Architecture remediation commits
+
+1. `c73b3a4` — `test(station): specify trusted publication authority`
+2. `ac9f0a7` — `fix(station): make publication owner-aware and forward-only`
+3. `9c8be6a` — `test(station): expose bounded selection and redaction gaps`
+4. `f3822ad` — `fix(station): bound workspace selection and redact SCP users`
+5. `9631d85` — `test(station): specify publication recovery CLI states`
+6. `abcf3f3` — `fix(station): expose committed recovery states`
+7. `c3b9a47` — `fix(station): retain recoverable owner authority`
 
 ## Final Remediation Closure
 

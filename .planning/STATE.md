@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
 status: complete
-stopped_at: Approved architecture remediation implemented; final cumulative gates pending
-last_updated: "2026-09-16T21:30:00.000Z"
+stopped_at: Approved architecture remediation verified complete at 153/153 tests
+last_updated: "2026-09-16T22:00:00.000Z"
 progress:
   total_phases: 1
   completed_phases: 1
@@ -30,7 +30,7 @@ Phase: 01 (deterministic-immutable-commit-extraction) — COMPLETE
 Plan: 8 of 8 implementation plans complete; final remediation verified
 **Milestone:** v1.0 Part 02 deterministic Station substrate — COMPLETE
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
-**Status:** Architecture remediation implemented; final cumulative, static, schema, isolation, scope, core, default-CLI, and archive gates pending
+**Status:** Complete after architecture remediation; 153-test cumulative, static, schema, 8-test isolation, scope, core, default-CLI, and archive gates passed
 **Plans:** 8/8 complete; 01-08 verification closed
 **Requirement coverage:** 16/16 complete
 **Current focus:** None; Phase 1 is ready for downstream host-integration planning.
@@ -123,10 +123,10 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T21:30:00.000Z
-- **Stopped at:** Approved architecture remediation implemented; final cumulative verification pending
+- **Last session:** 2026-09-16T22:00:00.000Z
+- **Stopped at:** Approved architecture remediation complete; all 153 Station tests and final isolation gates passed
 - **Resume file:** `.planning/phases/01-deterministic-immutable-commit-extraction/01-08-SUMMARY.md`
 
 ## Next Action
 
-Run final cumulative tests plus static, schema, isolation, scope, default/core, and archive identity gates; then record exact counts and head.
+Phase 1 architecture remediation is complete. Begin downstream host integration only under separately approved scope.
