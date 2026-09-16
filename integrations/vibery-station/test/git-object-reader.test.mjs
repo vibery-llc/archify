@@ -6,6 +6,7 @@ import {
   commitFixture,
   createCommitFromTreeRecords,
   createGitFixture,
+  createInvalidUtf8BackslashWorkspaceFixture,
   gitObjectId,
   recordingRunner,
   repositoryState,
@@ -283,6 +284,34 @@ test('classifies every backslash-containing real-Git path without dropping inven
       && fact.entryIndex === entryIndex
     )), hostilePath);
   }
+});
+
+test('classifies invalid UTF-8 raw-backslash manifest bytes before decode failure', () => {
+  const fixture = createInvalidUtf8BackslashWorkspaceFixture();
+  const reader = openFixture(fixture);
+  const hostileIndex = reader.inventory.findIndex(({ pathBytes }) => pathBytes.equals(fixture.hostilePathBytes));
+
+  assert.notEqual(hostileIndex, -1, 'combined-defect path was omitted from complete inventory');
+  assert.equal(reader.inventory.length, 3);
+  assert.equal(reader.inventory[hostileIndex].path, null);
+  assert.equal(reader.manifestCandidates.length, 2, 'raw backslash is not a POSIX manifest separator');
+  assert.deepEqual(
+    reader.unsupportedPaths.filter(({ entryIndex }) => entryIndex === hostileIndex),
+    [
+      {
+        code: 'station-extract/path-encoding-unsupported',
+        path: null,
+        pathBytesHex: fixture.hostilePathBytes.toString('hex'),
+        entryIndex: hostileIndex,
+      },
+      {
+        code: 'station-extract/path-shape-unsupported',
+        path: null,
+        pathBytesHex: fixture.hostilePathBytes.toString('hex'),
+        entryIndex: hostileIndex,
+      },
+    ],
+  );
 });
 
 test('classifies invalid UTF-8, unsafe shapes, and case/NFC aliases without dropping inventory entries', () => {

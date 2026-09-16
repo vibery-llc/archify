@@ -11,6 +11,7 @@ import {
   commitFixture,
   createCommitFromTreeRecords,
   createGitFixture,
+  createInvalidUtf8BackslashWorkspaceFixture,
   createPromisorFixture,
   recordingRunner,
   runFixtureGit,
@@ -31,6 +32,7 @@ export const ADVERSARIAL_EXTRACTION_MATRIX = Object.freeze([
   'manifest-symlink', 'manifest-gitlink', 'manifest-binary-nul', 'manifest-invalid-utf8',
   'control-character-path', 'selected-control-exact', 'selected-control-wildcard',
   'backslash-manifest-out-of-pattern', 'backslash-manifest-wildcard-selected',
+  'invalid-utf8-raw-backslash-manifest',
   'invalid-path-shape', 'case-collision', 'unicode-nfc-collision',
   'unsupported-glob', 'missing-root-manifest', 'malformed-manifest', 'oversized-manifest',
   'zero-workspace-matches', 'duplicate-package-identity', 'more-than-five-groups',
@@ -489,6 +491,32 @@ test('real-Git backslash manifests cannot evade complete accounting or produce p
     assert.equal(published.evidence.files.some(({ path: candidate }) => candidate === hostilePath), false, name);
     cover(name);
   }
+});
+
+test('real-Git invalid UTF-8 raw-backslash manifest cannot evade global path fallback', () => {
+  const fixture = createInvalidUtf8BackslashWorkspaceFixture();
+  const reader = createGitObjectReader({
+    repoRoot: fixture.root,
+    repositoryUrl: fixture.repositoryUrl,
+    revision: fixture.revision,
+  });
+  const hostileIndex = reader.inventory.findIndex(({ pathBytes }) => pathBytes.equals(fixture.hostilePathBytes));
+
+  assert.notEqual(hostileIndex, -1, 'combined-defect path was omitted from inventory');
+  assert.equal(reader.inventory.length, 3);
+  assert.deepEqual(
+    reader.unsupportedPaths.filter(({ entryIndex }) => entryIndex === hostileIndex).map(({ code }) => code),
+    ['station-extract/path-encoding-unsupported', 'station-extract/path-shape-unsupported'],
+  );
+  assert.equal(reader.manifestCandidates.length, 2);
+
+  const published = assertCoarse(fixture, ['station-fallback/path-unsupported']);
+  assert.equal(published.evidence.analysis.discovered_manifest_count, 2);
+  assert.equal(published.evidence.analysis.selected_manifest_count, 2);
+  assert.equal(published.evidence.analysis.represented_manifest_count, 0);
+  assert.deepEqual(published.evidence.packages, []);
+  assert.deepEqual(published.map.relations, []);
+  cover('invalid-utf8-raw-backslash-manifest');
 });
 
 test('invalid raw path shape remains fully inventoried and cannot produce partial detail', async () => {

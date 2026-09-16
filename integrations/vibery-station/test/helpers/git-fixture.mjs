@@ -41,6 +41,31 @@ export function createGitFixture({
   };
 }
 
+export function createInvalidUtf8BackslashWorkspaceFixture() {
+  const fixture = createGitFixture({ files: {
+    'package.json': '{"name":"root","workspaces":["packages/*"]}\n',
+    'packages/valid/package.json': '{"name":"valid"}\n',
+  } });
+  const hostilePathBytes = Buffer.from('ff5c7061636b6167652e6a736f6e', 'hex');
+  const hostileOid = writeBlobObject(fixture.root, Buffer.from('{"name":"hostile"}\n'));
+  const synthetic = createCommitFromTreeRecords(fixture.root, [
+    {
+      mode: '100644',
+      type: 'blob',
+      oid: gitObjectId(fixture.root, ['rev-parse', `${fixture.revision}:package.json`]),
+      pathBytes: Buffer.from('package.json'),
+    },
+    {
+      mode: '040000',
+      type: 'tree',
+      oid: gitObjectId(fixture.root, ['rev-parse', `${fixture.revision}:packages`]),
+      pathBytes: Buffer.from('packages'),
+    },
+    { mode: '100644', type: 'blob', oid: hostileOid, pathBytes: hostilePathBytes },
+  ], { message: 'invalid UTF-8 raw-backslash manifest' });
+  return { ...fixture, revision: synthetic.revision, hostilePathBytes };
+}
+
 export function createPromisorFixture({
   origin = 'git@github.com:Example/Station-Reader.git',
   files = { 'package.json': '{"name":"station-reader-fixture"}\n' },

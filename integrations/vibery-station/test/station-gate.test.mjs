@@ -7,7 +7,10 @@ import { createGitObjectReader } from '../lib/git-object-reader.mjs';
 import { deriveRelationId, deriveRoomId, deriveSnapshotId } from '../lib/identity.mjs';
 import { buildStationEvidence } from '../lib/node-workspace-evidence.mjs';
 import { projectStationMap } from '../lib/station-projector.mjs';
-import { createGitFixture } from './helpers/git-fixture.mjs';
+import {
+  createGitFixture,
+  createInvalidUtf8BackslashWorkspaceFixture,
+} from './helpers/git-fixture.mjs';
 
 const MiB = 1024 * 1024;
 const OTHER_40 = 'f'.repeat(40);
@@ -348,6 +351,57 @@ test('reader and independent gate force exact whole-project fallback for backsla
       `${label}: independent gate accepted omitted backslash classification`,
     );
   }
+});
+
+test('reader, producer, and independent gate fail closed for invalid UTF-8 raw-backslash manifest bytes', async () => {
+  const { gateStationArtifacts } = await loadGate();
+  const fixture = createInvalidUtf8BackslashWorkspaceFixture();
+  const reader = createGitObjectReader({
+    repoRoot: fixture.root,
+    repositoryUrl: fixture.repositoryUrl,
+    revision: fixture.revision,
+  });
+  const hostileIndex = reader.inventory.findIndex(({ pathBytes }) => pathBytes.equals(fixture.hostilePathBytes));
+  const hostileFacts = reader.unsupportedPaths.filter(({ entryIndex }) => entryIndex === hostileIndex);
+
+  assert.notEqual(hostileIndex, -1, 'combined-defect path was silently omitted');
+  assert.equal(reader.inventory.length, 3);
+  assert.equal(reader.manifestCandidates.length, 2);
+  assert.deepEqual(hostileFacts.map(({ code }) => code), [
+    'station-extract/path-encoding-unsupported',
+    'station-extract/path-shape-unsupported',
+  ]);
+
+  const evidence = buildStationEvidence(reader);
+  const map = projectStationMap(evidence.value, evidence.bytes);
+  assert.equal(evidence.value.analysis.discovered_manifest_count, 2);
+  assert.equal(evidence.value.analysis.selected_manifest_count, 2);
+  assert.equal(evidence.value.analysis.represented_manifest_count, 0);
+  assert.equal(evidence.value.analysis.detail_eligible, false);
+  assert.deepEqual(evidence.value.analysis.fallback_reason_codes, ['station-fallback/path-unsupported']);
+  assert.deepEqual(evidence.value.packages, []);
+  assert.equal(map.value.snapshot.mode, 'coarse');
+  assert.deepEqual(map.value.fallback.reason_codes, ['station-fallback/path-unsupported']);
+  assert.equal(map.value.rooms.length, 1);
+  assert.deepEqual(map.value.relations, []);
+
+  const accepted = gateStationArtifacts(evidence.bytes, map.bytes, reader);
+  assert.equal(accepted.mode, 'coarse');
+  assert.deepEqual(accepted.fallback_reason_codes, ['station-fallback/path-unsupported']);
+  assert.deepEqual(accepted.evidence_bytes, evidence.bytes);
+  assert.deepEqual(accepted.map_bytes, map.bytes);
+
+  const readerWithShapeFactOmitted = Object.freeze({
+    ...reader,
+    unsupportedPaths: Object.freeze(reader.unsupportedPaths.filter(({ code, entryIndex }) => (
+      code !== 'station-extract/path-shape-unsupported' || entryIndex !== hostileIndex
+    ))),
+  });
+  assert.throws(
+    () => gateStationArtifacts(evidence.bytes, map.bytes, readerWithShapeFactOmitted),
+    (error) => error?.diagnostic?.code === 'station-gate/evidence-identity-mismatch',
+    'independent gate accepted decode-first omission of raw backslash classification',
+  );
 });
 
 test('independent gate includes the selected root manifest in alias collision classification', async () => {
