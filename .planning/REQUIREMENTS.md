@@ -29,8 +29,8 @@
 
 ### Atomic Artifacts
 
-- [ ] **OUT-01**: A successful run emits `station-evidence/v1`, `station-map/v1`, and `station-extraction-receipt/v1` files whose receipt records exact file names, SHA-256 digests, byte counts, revision/tree identity, mode, counts, and deterministic contract versions without self-hashing or volatile data.
-- [ ] **OUT-02**: The three-artifact set is staged, fsynced/closed as required by the established Archify delivery pattern, preflighted against unsafe or aliased targets, and committed atomically so every failure preserves the complete last-known-good set.
+- [x] **OUT-01**: A successful run emits `station-evidence/v1`, `station-map/v1`, and `station-extraction-receipt/v1` files whose receipt records exact file names, SHA-256 digests, byte counts, revision/tree identity, mode, counts, and deterministic contract versions without self-hashing or volatile data.
+- [x] **OUT-02**: The three-artifact set is staged, fsynced/closed as required by the established Archify delivery pattern, preflighted against unsafe or aliased targets, and committed atomically so every failure preserves the complete last-known-good set.
 
 ### Isolation and Verification
 
@@ -79,8 +79,8 @@
 | MAP-03 | Phase 1 | Complete |
 | GATE-01 | Phase 1 | Complete |
 | GATE-02 | Phase 1 | Complete |
-| OUT-01 | Phase 1 | Pending |
-| OUT-02 | Phase 1 | Pending |
+| OUT-01 | Phase 1 | Complete |
+| OUT-02 | Phase 1 | Complete |
 | BOUND-01 | Phase 1 | Pending |
 | TEST-01 | Phase 1 | Pending |
 | TEST-02 | Phase 1 | Pending |
@@ -93,4 +93,4 @@
 
 ---
 *Requirements defined: 2026-09-16*
-*Last updated: 2026-09-16 after Plan 01-05 independent fail-closed Station gate*
+*Last updated: 2026-09-16 after Plan 01-06 deterministic receipt and atomic immutable-generation publication*

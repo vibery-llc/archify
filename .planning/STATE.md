@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-09-16T15:59:42.000Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-09-16T16:17:36.000Z"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 8
-  completed_plans: 5
-  percent: 63
+  completed_plans: 6
+  percent: 75
 ---
 
 # Session State
@@ -27,13 +27,13 @@ See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.
 ## Current Position
 
 Phase: 01 (deterministic-immutable-commit-extraction) — EXECUTING
-Plan: 6 of 8
+Plan: 7 of 8
 **Milestone:** v1.0 Part 02 deterministic Station substrate
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
 **Status:** Ready to execute
-**Plans:** 5/8 complete; next is `01-06-PLAN.md`
-**Requirement coverage:** 16/16 assigned to plans exactly once; 10 complete; 0 unmapped; 0 duplicate assignments
-**Current focus:** Plan 01-06 — receipt, CLI orchestration, and atomic bundle publication
+**Plans:** 6/8 complete; next is `01-07-PLAN.md`
+**Requirement coverage:** 16/16 assigned to plans exactly once; 12 complete; 0 unmapped; 0 duplicate assignments
+**Current focus:** Plan 01-07 — clone-independent determinism and Vibery-shaped acceptance
 
 ## Locked Boundaries
 
@@ -87,6 +87,9 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-05]: Independently revalidate reader inventory, manifest policy, path accounting, selected blobs, ledger facts, and topology instead of trusting either producer artifact. — Independence must cover policy and complete facts, not only schema or identity checks.
 - [Phase 01-05]: Classify canonical representation, array order, references, evidence identity, topology identity, and unsupported claims with bounded logical diagnostics. — Stable failure classes make mutation rejection actionable without exposing local or secret data.
 - [Phase 01-05]: Return accepted Buffers through defensive-copy getters while freezing all result metadata. — Node Buffers cannot be deeply frozen, so mutation isolation must be enforced at the API boundary.
+- [Phase 01-06]: Build the success receipt only from frozen gate metadata and bind only evidence/map logical names, exact bytes, repository/tree identity, fixed extractor contract, and topology result. — The receipt stays deterministic, clone-independent, non-self-hashing, and free of volatile execution data.
+- [Phase 01-06]: Publish complete immutable generations before one regular-file CURRENT rename and never delete prior generations. — A once-resolved reader remains valid across concurrent publication and interruption.
+- [Phase 01-06]: Retain deterministic recovery and rollback-failure markers when post-rename restoration fails, and report directory-fsync limitations explicitly. — Recovery never becomes a success claim, while unsupported platform durability is not overclaimed.
 
 ## Performance Metrics
 
@@ -97,13 +100,14 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 | Phase 01 P03 | 8 min | 2 tasks | 2 files |
 | Phase 01 P04 | 7 min | 2 tasks | 2 files |
 | Phase 01 P05 | 9 min | 2 tasks | 2 files |
+| Phase 01 P06 | 12 min | 2 tasks | 5 files |
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T15:59:42.000Z
-- **Stopped at:** Completed 01-05-PLAN.md
+- **Last session:** 2026-09-16T16:17:36.000Z
+- **Stopped at:** Completed 01-06-PLAN.md
 - **Resume file:** None
 
 ## Next Action
 
-Execute `01-06-PLAN.md` only when authorized; build receipts solely from frozen gate success and preserve one complete immutable generation across every publication failure.
+Execute `01-07-PLAN.md` only when authorized; prove clone-independent exact bytes, stable topology identities, and the twelve-workspace Vibery-shaped acceptance through the integration CLI.
