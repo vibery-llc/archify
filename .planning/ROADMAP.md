@@ -1,6 +1,6 @@
 # Roadmap: Archify Station Map
 
-_Last updated: 2026-09-16 after Plan 01-08 — Completed milestone: **v1.0 Part 02 deterministic Station substrate**. Source of truth: `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, and Phase 1 research at `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md`._
+_Last updated: 2026-09-16 after Plan 01-08 remediation and final 139/139 verification — Completed milestone: **v1.0 Part 02 deterministic Station substrate**. Source of truth: `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, and Phase 1 research at `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md`._
 
 ## Milestone
 
@@ -33,7 +33,7 @@ _Last updated: 2026-09-16 after Plan 01-08 — Completed milestone: **v1.0 Part 
 
 **Success Criteria** (all must be observable and mechanically verifiable):
 
-1. CLI contract tests reject credentialed/malformed repository inputs, normalize every equivalent supported-forge HTTPS/SSH/SCP spelling to one Station canonical URL, require one full locally available 40-hex SHA-1 commit, and prove every repository fact is read from commit tree/blob OIDs with replacement objects and lazy fetching disabled—never from checkout files.
+1. CLI contract tests reject credentialed/malformed repository inputs, normalize every equivalent supported-forge HTTPS/SSH/SCP spelling to one Station canonical URL, admit canonical arbitrary-host HTTPS/SSH/SCP identities without collapsing transport/port/path-kind semantics, require one full locally available 40-hex SHA-1 commit, and prove every repository fact is read from commit tree/blob OIDs with replacement objects and lazy fetching disabled—never from checkout files.
 2. Two clones of the same commit at different absolute paths, branches, and dirty-worktree states emit byte-for-byte identical evidence, map, and receipt files; each file is valid UTF-8 canonical JSON with LF endings, exactly one trailing newline, and no timestamp, absolute path, branch, process, host, or runtime value.
 3. Schema and recomputation assertions prove the evidence ledger records the exact commit/tree, selected manifest paths/OIDs/SHA-256/byte counts, workspace membership, package declarations, dependency scopes, and extractor contract, with every evidence reference resolvable to one selected blob.
 4. Fixture assertions prove a root package or complete one-to-five-group Node/npm workspace produces sorted, disjoint, exhaustive rooms and exact aggregated directed cross-room declarations with no same-room self-loop; the twelve-workspace Vibery-shaped fixture produces four rooms and exactly three expected relation directions without product-specific labels or an LLM.
@@ -41,7 +41,7 @@ _Last updated: 2026-09-16 after Plan 01-08 — Completed milestone: **v1.0 Part 
 6. Identity tests prove project/room/relation IDs exclude revision, labels, and layout; a README-only commit changes snapshot identity while preserving durable topology IDs, and every ID is reproducible from documented versioned canonical inputs.
 7. A table-driven tamper suite independently mutates each schema version, selected-file set, workspace/package/declaration fact, derived ID, digest, ordering rule, membership, evidence reference, relation, count, completeness rule, and true/false fallback cause; every isolated or coherent evidence/map mutation is rejected by a stable `station-gate/*` diagnostic before publication.
 8. Failure and child-termination injection around generation writes and the sole pointer rename proves `CURRENT` always selects a complete old or new immutable set; unsafe/aliased/symlinked/conflicting paths and pointer-restoration failures produce distinct typed diagnostics, preserve deterministic recovery material, and never report success.
-9. Provider-free adversarial fixtures cover replacement refs, unavailable local objects, symlink/gitlink/binary/invalid-UTF-8/control-character/path-collision inputs, manifest/tree budgets, every fallback reason, and deterministic repeated execution using only temporary local Git repositories.
+9. Provider-free adversarial fixtures cover replacement refs, unavailable local objects, a real local promisor/partial clone that proves `GIT_NO_LAZY_FETCH` prevents hydration, symlink/gitlink/binary/invalid-UTF-8/control-character/path-collision inputs, manifest/tree budgets, every fallback reason, and deterministic repeated execution using only temporary local Git repositories.
 10. Isolation checks prove all new runtime and test behavior is owned by `integrations/vibery-station/`, extraction opens no network/browser/preview/update/brand-capture path, and default Archify help, schemas, renderers, Viewer assets, generated artifacts, examples, and `archify.zip` bytes are unchanged.
 
 **Plans:** 8 executable plans in 8 ordered waves

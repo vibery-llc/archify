@@ -8,7 +8,7 @@
 ### Immutable Git Evidence
 
 - [x] **GIT-01**: An operator can request extraction only with a canonical repository identity and one full 40-character commit that resolves locally to a commit object.
-- [x] **GIT-02**: Extraction reads repository facts only from pinned Git tree/blob objects with replacement objects and lazy network fetching disabled, so checkout branch, dirty files, and absolute clone path cannot change output.
+- [x] **GIT-02**: Extraction reads repository facts only from pinned Git tree/blob objects with replacement objects and lazy fetching disabled, as proven against a local promisor/partial clone, so checkout branch, dirty files, absolute clone path, and promised remote objects cannot change output.
 - [x] **GIT-03**: Tree enumeration and manifest selection enforce explicit count/byte budgets and reject malformed, incomplete, aliased, non-UTF-8, control-character, symlink, gitlink, and non-regular-file evidence according to typed hard-failure or fallback policy.
 
 ### Evidence Ledger
@@ -36,7 +36,7 @@
 
 - [x] **BOUND-01**: The implementation is isolated under `integrations/vibery-station/` and does not change default Archify CLI, core schemas/renderers, Viewer runtime, generated artifacts, or `archify.zip` behavior.
 - [x] **TEST-01**: Provider-free tests prove byte-identical output across different clones, dirty worktrees, and checked-out branches, while README-only revisions change snapshot identity but preserve durable topology IDs.
-- [x] **TEST-02**: Provider-free adversarial tests cover replacement refs, missing local objects, symlink/gitlink/binary/invalid-UTF-8/path-collision inputs, resource budgets, all fallback reasons, every gate-tamper class, unsafe targets, interrupted commits, and rollback failure.
+- [x] **TEST-02**: Provider-free adversarial tests cover replacement refs, missing and promised-but-unhydrated local objects, symlink/gitlink/binary/invalid-UTF-8/path-collision inputs, resource budgets, all fallback reasons, every gate-tamper class, unsafe targets, interrupted commits, concurrent publishers, and rollback failure.
 - [x] **TEST-03**: A Vibery-shaped fixture with twelve workspaces deterministically produces four structural rooms and exactly the expected aggregated cross-room relation directions without product-specific code or an LLM.
 
 ## v2 Requirements
@@ -93,4 +93,4 @@
 
 ---
 *Requirements defined: 2026-09-16*
-*Last updated: 2026-09-16 after Plan 01-08 adversarial closure and Phase 1 completion*
+*Last updated: 2026-09-16 after Plan 01-08 remediation and final 139/139 Phase 1 verification*

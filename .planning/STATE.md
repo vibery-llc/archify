@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
-status: in_progress
-stopped_at: Remediating final Phase 1 verification blockers
-last_updated: "2026-09-16T18:42:53.000Z"
+status: complete
+stopped_at: Phase 1 remediation verified complete at 139/139 tests
+last_updated: "2026-09-16T19:05:55.000Z"
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 8
   completed_plans: 8
-  percent: 95
+  percent: 100
 ---
 
 # Session State
@@ -26,14 +26,14 @@ See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.
 
 ## Current Position
 
-Phase: 01 (deterministic-immutable-commit-extraction) — VERIFICATION BLOCKED
-Plan: 8 of 8 implementation plans complete; final remediation in progress
-**Milestone:** v1.0 Part 02 deterministic Station substrate — IN PROGRESS
+Phase: 01 (deterministic-immutable-commit-extraction) — COMPLETE
+Plan: 8 of 8 implementation plans complete; final remediation verified
+**Milestone:** v1.0 Part 02 deterministic Station substrate — COMPLETE
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
-**Status:** Blocked on final verification remediation
-**Plans:** 8/8 complete; 01-08 verification reopened
-**Requirement coverage:** 16/16 assigned; final acceptance remains pending until remediation gates pass
-**Current focus:** Remediate generation authentication, concurrent publication rollback, selected control-path typing, generic canonical repository admission, and partial-clone test evidence.
+**Status:** Complete after focused, cumulative, static, schema, isolation, scope, core, default-CLI, and archive gates passed
+**Plans:** 8/8 complete; 01-08 verification closed
+**Requirement coverage:** 16/16 complete
+**Current focus:** None; Phase 1 is ready for downstream host-integration planning.
 
 ## Locked Boundaries
 
@@ -74,7 +74,7 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 ## Accumulated Decisions
 
 - **01-01:** Keep all Station schemas, runtime validators, diagnostics, canonicalization, and identities integration-owned with zero runtime dependencies.
-- **01-01:** Artifact repository URLs accept only identity-derived canonical HTTPS forms for supported GitHub/Gitee identities; transport spellings are input-only.
+- **01-01:** Artifact repository URLs use identity-derived canonical forms: standard GitHub/Gitee identities normalize to HTTPS, while arbitrary-host HTTPS/SSH/SCP identities retain transport, port, and path-kind semantics; credentials and noncanonical spellings are rejected.
 - **01-01:** Durable topology IDs use versioned NUL-separated structural inputs and exclude revision/presentation data; snapshot identity binds revision and exact evidence hash.
 - [Phase 01-02]: Directly type the supplied Git object as commit before peeling so annotated-tag object IDs are rejected. — A full tag OID can satisfy revision^{commit}, so peeling alone does not prove the supplied identity is itself immutable commit evidence.
 - [Phase 01-02]: Preserve complete raw tree inventory while classifying unsupported paths; malformed or incomplete tree protocol remains a hard failure. — Coarse fallback may consume trustworthy unsupported evidence but cannot repair loss of tree completeness.
@@ -96,6 +96,9 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-08]: Run repository-constructible hostility through the real CLI and reserve injected seams for malformed protocol and impossible-to-time filesystem failures. — Acceptance remains end-to-end wherever the local Git/filesystem can construct the case.
 - [Phase 01-08]: Combine a throwing no-network/process preload with static import and Git-command allowlists. — Dynamic success alone cannot prove that dormant provider, browser, renderer, or remote Git routes are absent.
 - [Phase 01-08]: Keep complete ledger evidence for an out-of-range room count while exposing only one coarse room and zero relations. — Full immutable evidence is truthful; only partial topology claims are forbidden.
+- [Phase 01-08 remediation]: Authenticate resolved generations from exact artifact hashes and revalidate every receipt/evidence/map identity binding. — A coherent rewrite must not become authoritative merely by renaming a generation directory.
+- [Phase 01-08 remediation]: Preserve a newer concurrent publisher's CURRENT authority and retain accurate recovery material after commit durability failures. — Rollback may restore only the failed publisher's own pointer identity.
+- [Phase 01-08 remediation]: Prove local-object-only behavior with a real provider-free promisor fixture whose promised blob fails under `GIT_NO_LAZY_FETCH`, remains absent after extraction, and hydrates only in the explicit control read. — Missing-object tests now discriminate disabled lazy fetch from ordinary absence.
 
 ## Performance Metrics
 
@@ -112,10 +115,10 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T18:42:53.000Z
-- **Stopped at:** Final Phase 1 verification remediation in progress
+- **Last session:** 2026-09-16T19:05:55.000Z
+- **Stopped at:** Phase 1 remediation complete; all 139 Station tests and isolation gates passed
 - **Resume file:** `.planning/phases/01-deterministic-immutable-commit-extraction/01-08-SUMMARY.md`
 
 ## Next Action
 
-Complete the five final verification remediations and return Phase 1 to complete only after focused, cumulative, static, and isolation gates all pass.
+Phase 1 is complete. Begin downstream host-integration planning only under a separately approved scope.
