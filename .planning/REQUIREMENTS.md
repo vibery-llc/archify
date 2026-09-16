@@ -7,9 +7,9 @@
 
 ### Immutable Git Evidence
 
-- [ ] **GIT-01**: An operator can request extraction only with a canonical repository identity and one full 40-character commit that resolves locally to a commit object.
-- [ ] **GIT-02**: Extraction reads repository facts only from pinned Git tree/blob objects with replacement objects and lazy network fetching disabled, so checkout branch, dirty files, and absolute clone path cannot change output.
-- [ ] **GIT-03**: Tree enumeration and manifest selection enforce explicit count/byte budgets and reject malformed, incomplete, aliased, non-UTF-8, control-character, symlink, gitlink, and non-regular-file evidence according to typed hard-failure or fallback policy.
+- [x] **GIT-01**: An operator can request extraction only with a canonical repository identity and one full 40-character commit that resolves locally to a commit object.
+- [x] **GIT-02**: Extraction reads repository facts only from pinned Git tree/blob objects with replacement objects and lazy network fetching disabled, so checkout branch, dirty files, and absolute clone path cannot change output.
+- [x] **GIT-03**: Tree enumeration and manifest selection enforce explicit count/byte budgets and reject malformed, incomplete, aliased, non-UTF-8, control-character, symlink, gitlink, and non-regular-file evidence according to typed hard-failure or fallback policy.
 
 ### Evidence Ledger
 
@@ -69,9 +69,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GIT-01 | Phase 1 | Pending |
-| GIT-02 | Phase 1 | Pending |
-| GIT-03 | Phase 1 | Pending |
+| GIT-01 | Phase 1 | Complete |
+| GIT-02 | Phase 1 | Complete |
+| GIT-03 | Phase 1 | Complete |
 | EVID-01 | Phase 1 | Pending |
 | EVID-02 | Phase 1 | Complete |
 | MAP-01 | Phase 1 | Complete |
@@ -93,4 +93,4 @@
 
 ---
 *Requirements defined: 2026-09-16*
-*Last updated: 2026-09-16 after brownfield mapping and Phase 1 research*
+*Last updated: 2026-09-16 after Plan 01-02 immutable local Git object reader*

@@ -3,13 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
 status: executing
-last_updated: "2026-09-16T15:06:07.000Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-09-16T15:23:00.281Z"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 8
-  completed_plans: 1
-  percent: 13
+  completed_plans: 2
+  percent: 25
 ---
 
 # Session State
@@ -26,13 +27,13 @@ See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.
 ## Current Position
 
 Phase: 01 (deterministic-immutable-commit-extraction) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 **Milestone:** v1.0 Part 02 deterministic Station substrate
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
-**Status:** Executing Phase 01
-**Plans:** 1/8 complete; next is `01-02-PLAN.md`
-**Requirement coverage:** 16/16 assigned to plans exactly once; 2 complete; 0 unmapped; 0 duplicate assignments
-**Current focus:** Plan 01-02 — immutable local Git object reader
+**Status:** Ready to execute
+**Plans:** 2/8 complete; next is `01-03-PLAN.md`
+**Requirement coverage:** 16/16 assigned to plans exactly once; 5 complete; 0 unmapped; 0 duplicate assignments
+**Current focus:** Plan 01-03 — bounded Node workspace evidence ledger
 
 ## Locked Boundaries
 
@@ -75,19 +76,23 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - **01-01:** Keep all Station schemas, runtime validators, diagnostics, canonicalization, and identities integration-owned with zero runtime dependencies.
 - **01-01:** Artifact repository URLs accept only identity-derived canonical HTTPS forms for supported GitHub/Gitee identities; transport spellings are input-only.
 - **01-01:** Durable topology IDs use versioned NUL-separated structural inputs and exclude revision/presentation data; snapshot identity binds revision and exact evidence hash.
+- [Phase 01-02]: Directly type the supplied Git object as commit before peeling so annotated-tag object IDs are rejected. — A full tag OID can satisfy revision^{commit}, so peeling alone does not prove the supplied identity is itself immutable commit evidence.
+- [Phase 01-02]: Preserve complete raw tree inventory while classifying unsupported paths; malformed or incomplete tree protocol remains a hard failure. — Coarse fallback may consume trustworthy unsupported evidence but cannot repair loss of tree completeness.
+- [Phase 01-02]: Return every discovered manifest with explicit count-policy status and exact size probes rather than truncating or partially reading. — The evidence layer can choose truthful whole-project fallback only when accounting is complete.
 
 ## Performance Metrics
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | 01-01 | 10 min | 2 | 9 |
+| Phase 01 P02 | 9 min | 2 tasks | 3 files |
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T15:06:07Z
-- **Stopped at:** Completed 01-01-PLAN.md
+- **Last session:** 2026-09-16T15:23:00.254Z
+- **Stopped at:** Completed 01-02-PLAN.md
 - **Resume file:** None
 
 ## Next Action
 
-Execute `01-02-PLAN.md` only when authorized; preserve the verified sequence, single phase, and all locked exclusions throughout execution.
+Execute `01-03-PLAN.md` only when authorized; consume the immutable object reader without weakening its exact-size, complete-inventory, or fail-closed boundaries.
