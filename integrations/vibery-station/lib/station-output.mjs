@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { TextDecoder } from 'node:util';
 import { canonicalFuturePath, pathsAlias } from '../../../archify/renderers/shared/output-path.mjs';
+import { parseRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import { canonicalJsonBytes, sha256Hex } from './canonical-json.mjs';
 import {
   STATION_CONTRACT_VERSION,
@@ -11,6 +12,13 @@ import {
   validateStationMap,
 } from './contracts.mjs';
 import { createStationDiagnostic, StationDiagnosticError } from './diagnostics.mjs';
+import {
+  deriveEvidenceId,
+  deriveProjectId,
+  deriveRelationId,
+  deriveRoomId,
+  deriveSnapshotId,
+} from './identity.mjs';
 import { gateStationArtifacts } from './station-gate.mjs';
 
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
@@ -233,19 +241,87 @@ function verifyGenerationFiles(operations, generationPath, expected) {
   return contents;
 }
 
-function validateResolvedContents(contents) {
+function validateResolvedContents(contents, generationId) {
   const code = 'station-output/pointer-invalid';
   const evidence = strictJson(contents.evidenceBytes, STATION_SCHEMAS.evidence, validateStationEvidence, code);
   const map = strictJson(contents.mapBytes, STATION_SCHEMAS.map, validateStationMap, code);
   const receipt = strictJson(contents.receiptBytes, STATION_SCHEMAS.receipt, validateStationExtractionReceipt, code);
-  if (receipt.artifacts.evidence.sha256 !== sha256Hex(contents.evidenceBytes)
+  const hashes = {
+    evidence: sha256Hex(contents.evidenceBytes),
+    map: sha256Hex(contents.mapBytes),
+    receipt: sha256Hex(contents.receiptBytes),
+  };
+  if (generationId !== deriveStationGenerationId(hashes)) {
+    fail(code, 'CURRENT generation ID does not authenticate its exact artifact bytes.');
+  }
+
+  let projectId;
+  try {
+    const location = parseRepositoryRemote(evidence.repository.url, { authored: true });
+    if (!location) throw new Error('repository identity unavailable');
+    projectId = deriveProjectId(location.identity);
+    for (const file of evidence.files) {
+      if (file.id !== deriveEvidenceId(file.path, file.git_oid)) throw new Error('evidence identity mismatch');
+    }
+    for (const room of map.rooms) {
+      if (room.id !== deriveRoomId(projectId, room.structural_key)) throw new Error('room identity mismatch');
+    }
+    for (const relation of map.relations) {
+      if (relation.id !== deriveRelationId(relation.from_room_id, relation.to_room_id)) {
+        throw new Error('relation identity mismatch');
+      }
+    }
+    if (map.snapshot.id !== deriveSnapshotId(
+      projectId,
+      evidence.repository.revision,
+      hashes.evidence,
+      evidence.extractor.profile,
+    )) throw new Error('snapshot identity mismatch');
+  } catch {
+    fail(code, 'CURRENT generation contains inconsistent derived identities.');
+  }
+
+  const same = (left, right) => canonicalJsonBytes(left).equals(canonicalJsonBytes(right));
+  const evidenceIds = new Set(evidence.files.map(({ id }) => id));
+  const roomIds = new Set(map.rooms.map(({ id }) => id));
+  const referencesResolve = evidence.packages.every(({ manifest_evidence_id: id }) => evidenceIds.has(id))
+    && (evidence.workspace.root_manifest_evidence_id === null
+      || evidenceIds.has(evidence.workspace.root_manifest_evidence_id))
+    && map.rooms.every((room) => room.project_id === projectId
+      && room.evidence_ids.every((id) => evidenceIds.has(id)))
+    && map.relations.every((relation) => roomIds.has(relation.from_room_id)
+      && roomIds.has(relation.to_room_id)
+      && relation.evidence_ids.every((id) => evidenceIds.has(id)));
+  const repository = {
+    url: evidence.repository.url,
+    revision: evidence.repository.revision,
+    tree_oid: evidence.repository.tree_oid,
+    object_format: evidence.repository.object_format,
+  };
+  const expectedResult = {
+    project_id: projectId,
+    snapshot_id: map.snapshot.id,
+    mode: map.snapshot.mode,
+    rooms: map.rooms.length,
+    relations: map.relations.length,
+    fallback: map.fallback.used,
+    fallback_reason_codes: map.fallback.reason_codes,
+  };
+  if (!referencesResolve
+      || evidence.repository.id !== projectId
+      || map.project.id !== projectId
+      || map.snapshot.project_id !== projectId
+      || map.snapshot.revision !== evidence.repository.revision
+      || map.snapshot.profile !== evidence.extractor.profile
+      || map.snapshot.evidence_sha256 !== hashes.evidence
+      || !same(receipt.repository, repository)
+      || !same(receipt.extractor, evidence.extractor)
+      || !same(receipt.result, expectedResult)
+      || receipt.artifacts.evidence.sha256 !== hashes.evidence
       || receipt.artifacts.evidence.bytes !== contents.evidenceBytes.length
-      || receipt.artifacts.map.sha256 !== sha256Hex(contents.mapBytes)
-      || receipt.artifacts.map.bytes !== contents.mapBytes.length
-      || map.snapshot.evidence_sha256 !== receipt.artifacts.evidence.sha256
-      || evidence.repository.revision !== receipt.repository.revision
-      || map.snapshot.id !== receipt.result.snapshot_id) {
-    fail('station-output/pointer-invalid', 'CURRENT generation receipt binding is inconsistent.');
+      || receipt.artifacts.map.sha256 !== hashes.map
+      || receipt.artifacts.map.bytes !== contents.mapBytes.length) {
+    fail(code, 'CURRENT generation receipt, evidence, and map bindings are inconsistent.');
   }
   return receipt;
 }
@@ -257,7 +333,7 @@ function readPreviousPointer(operations, bundleRoot, generationsPath, currentPat
   const generationId = parsePointer(bytes);
   const generationPath = canonicalAuthored(path.join(generationsPath, generationId), 'current generation');
   const contents = verifyGenerationFiles(operations, generationPath);
-  validateResolvedContents(contents);
+  validateResolvedContents(contents, generationId);
   return Object.freeze({ stat, bytes, generationId });
 }
 
@@ -548,7 +624,7 @@ export function readStationGeneration(bundleRootInput, { operations: suppliedOpe
   directory(operations, generationsPath, 'generations');
   const generationPath = canonicalAuthored(path.join(generationsPath, generationId), 'current generation');
   const contents = verifyGenerationFiles(operations, generationPath);
-  const receipt = validateResolvedContents(contents);
+  const receipt = validateResolvedContents(contents, generationId);
   return Object.freeze({
     generation_id: generationId,
     evidenceBytes: Buffer.from(contents.evidenceBytes),
