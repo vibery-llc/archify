@@ -16,9 +16,9 @@ _Last updated: 2026-09-16 after Plan 01-01 — Active milestone: **v1.0 Part 02 
 
 ### Phase 1: Deterministic Immutable-Commit Extraction
 
-**Directory:** `.planning/phases/01-deterministic-immutable-commit-extraction/`  
-**Goal:** A caller can extract one explicit immutable local commit into a gated `station-evidence/v1`, `station-map/v1`, and `station-extraction-receipt/v1` set without checkout influence, unsupported topology claims, or loss of the prior trusted set.  
-**Depends on:** Existing local Git plumbing; repository identity/redaction conventions; canonicalization, diagnostic, output-path, and rollback precedents documented by the brownfield map. No network, provider, browser, renderer, host, or package installation dependency.  
+**Directory:** `.planning/phases/01-deterministic-immutable-commit-extraction/`
+**Goal:** A caller can extract one explicit immutable local commit into a gated `station-evidence/v1`, `station-map/v1`, and `station-extraction-receipt/v1` set without checkout influence, unsupported topology claims, or loss of the prior trusted set.
+**Depends on:** Existing local Git plumbing; repository identity/redaction conventions; canonicalization, diagnostic, output-path, and rollback precedents documented by the brownfield map. No network, provider, browser, renderer, host, or package installation dependency.
 **Requirements:** GIT-01, GIT-02, GIT-03, EVID-01, EVID-02, MAP-01, MAP-02, MAP-03, GATE-01, GATE-02, OUT-01, OUT-02, BOUND-01, TEST-01, TEST-02, TEST-03
 
 **Implementation shape:**

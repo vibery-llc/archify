@@ -16,9 +16,9 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` — milestone boundary and core value  
-See: `.planning/REQUIREMENTS.md` — 16 v1 requirements, all mapped exactly once to Phase 1  
-See: `.planning/ROADMAP.md` — one-phase v1.0 roadmap  
+See: `.planning/PROJECT.md` — milestone boundary and core value
+See: `.planning/REQUIREMENTS.md` — 16 v1 requirements, all mapped exactly once to Phase 1
+See: `.planning/ROADMAP.md` — one-phase v1.0 roadmap
 See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md` — authoritative Phase 1 research
 
 **Core value:** Given the same repository identity and exact commit, Station receives byte-identical, independently verifiable topology artifacts—or no replacement at all.
@@ -27,11 +27,11 @@ See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.
 
 Phase: 01 (deterministic-immutable-commit-extraction) — EXECUTING
 Plan: 2 of 8
-**Milestone:** v1.0 Part 02 deterministic Station substrate  
-**Phase:** 1 — Deterministic Immutable-Commit Extraction  
+**Milestone:** v1.0 Part 02 deterministic Station substrate
+**Phase:** 1 — Deterministic Immutable-Commit Extraction
 **Status:** Executing Phase 01
-**Plans:** 1/8 complete; next is `01-02-PLAN.md`  
-**Requirement coverage:** 16/16 assigned to plans exactly once; 2 complete; 0 unmapped; 0 duplicate assignments  
+**Plans:** 1/8 complete; next is `01-02-PLAN.md`
+**Requirement coverage:** 16/16 assigned to plans exactly once; 2 complete; 0 unmapped; 0 duplicate assignments
 **Current focus:** Plan 01-02 — immutable local Git object reader
 
 ## Locked Boundaries

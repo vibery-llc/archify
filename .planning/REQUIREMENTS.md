@@ -1,6 +1,6 @@
 # Requirements: Archify Station Map
 
-**Defined:** 2026-09-16  
+**Defined:** 2026-09-16
 **Core Value:** Given the same repository identity and exact commit, Station receives byte-identical, independently verifiable topology artifacts—or no replacement at all.
 
 ## v1 Requirements
@@ -92,5 +92,5 @@
 - Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-09-16*  
+*Requirements defined: 2026-09-16*
 *Last updated: 2026-09-16 after brownfield mapping and Phase 1 research*
