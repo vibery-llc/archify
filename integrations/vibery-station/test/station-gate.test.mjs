@@ -61,7 +61,7 @@ async function rejectMutation(base, target, mutate, code) {
   assert.throws(
     () => gateStationArtifacts(bytes(evidence), bytes(map), base.reader),
     (error) => {
-      assert.equal(error?.diagnostic?.code, code);
+      assert.equal(error?.diagnostic?.code, code, JSON.stringify(error?.diagnostic));
       assert.equal(error.diagnostic.severity, 'error');
       assert.deepEqual(Object.keys(error.diagnostic), [
         'code', 'severity', 'message', 'subject', 'evidence', 'supportedFixes',
@@ -241,7 +241,6 @@ test('rejects room membership/evidence/confidence and relation endpoints/scopes/
     (value) => { value.rooms[0].evidence_ids = [`evidence-${OTHER_64}`]; },
     (value) => { value.rooms[0].label = 'invented'; },
     (value) => { value.rooms[0].structural_key = 'workspace-path-group:invented'; },
-    (value) => { value.rooms[0].confidence = 'coarse'; },
     (value) => { [value.relations[0].from_room_id, value.relations[0].to_room_id] = [value.relations[0].to_room_id, value.relations[0].from_room_id]; },
     (value) => { value.relations[0].scopes = ['optionalDependencies']; },
     (value) => { value.relations[0].evidence_ids = [`evidence-${OTHER_64}`]; },
@@ -249,6 +248,9 @@ test('rejects room membership/evidence/confidence and relation endpoints/scopes/
   for (const mutate of cases) {
     await rejectMutation(base, 'map', mutate, 'station-gate/unsupported-claim');
   }
+  await rejectMutation(base, 'map', (value) => {
+    value.rooms[0].confidence = 'coarse';
+  }, 'station-gate/schema-invalid');
 });
 
 test('rejects omitted, invented, self-loop, and reordered topology', async () => {
