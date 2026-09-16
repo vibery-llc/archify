@@ -11,6 +11,7 @@ import {
   commitFixture,
   createCommitFromTreeRecords,
   createGitFixture,
+  createPromisorFixture,
   recordingRunner,
   runFixtureGit,
   writeBlobObject,
@@ -165,6 +166,18 @@ function removeLooseObject(root, oid) {
   fs.unlinkSync(objectPath);
 }
 
+function probeGitObject(root, oid, { noLazyFetch = false } = {}) {
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' };
+  delete env.GIT_NO_LAZY_FETCH;
+  if (noLazyFetch) env.GIT_NO_LAZY_FETCH = '1';
+  return spawnSync('git', ['-C', root, 'cat-file', 'blob', oid], {
+    encoding: null,
+    shell: false,
+    maxBuffer: MiB,
+    env,
+  });
+}
+
 function treeRecord({ mode = '100644', type = 'blob', oid = '1'.repeat(40), pathBytes = Buffer.from('package.json'), terminate = true } = {}) {
   return Buffer.concat([
     Buffer.from(`${mode} ${type} ${oid}\t`, 'ascii'),
@@ -287,6 +300,40 @@ test('missing local commit, tree, and blob objects are hard failures with prior 
   removeLooseObject(missingBlobFixture.root, blob);
   assertCliHardFailure(missingBlobFixture, bundleRoot, before, 'station-extract/object-unavailable', {}, 'missing-blob');
   cover('missing-blob');
+});
+
+test('a local promisor fixture distinguishes missing objects from lazy hydration and proves the reader disables fetch', () => {
+  const manifest = Buffer.from(json({ name: 'promised-manifest' }));
+  const fixture = createPromisorFixture({ files: {
+    'package.json': manifest,
+    'README.md': 'promisor fixture\n',
+  } });
+  const blob = runFixtureGit(fixture.sourceRoot, ['rev-parse', `${fixture.revision}:package.json`]);
+  assert.equal(runFixtureGit(fixture.root, ['config', '--get', 'remote.promisor-source.promisor']), 'true');
+
+  const absentBefore = probeGitObject(fixture.root, blob, { noLazyFetch: true });
+  assert.notEqual(absentBefore.status, 0, 'promised blob unexpectedly exists before the discriminating read');
+  assert.match(absentBefore.stderr.toString('utf8'), /lazy fetching disabled|could not fetch/i);
+
+  const { bundleRoot, before } = seedAuthority();
+  assertCliHardFailure(
+    fixture,
+    bundleRoot,
+    before,
+    'station-extract/object-unavailable',
+    {},
+    'partial-clone-lazy-fetch-disabled',
+  );
+  const absentAfter = probeGitObject(fixture.root, blob, { noLazyFetch: true });
+  assert.notEqual(absentAfter.status, 0, 'failed extraction hydrated the promised blob');
+
+  const hydrated = probeGitObject(fixture.root, blob);
+  assert.equal(hydrated.status, 0, hydrated.stderr.toString('utf8'));
+  assert.deepEqual(hydrated.stdout, manifest);
+  const localAfterHydration = probeGitObject(fixture.root, blob, { noLazyFetch: true });
+  assert.equal(localAfterHydration.status, 0, localAfterHydration.stderr.toString('utf8'));
+  assert.deepEqual(localAfterHydration.stdout, manifest);
+  cover('partial-clone-lazy-fetch-disabled');
 });
 
 test('origin, root, and object-format hostility emits stable redacted diagnostics', () => {

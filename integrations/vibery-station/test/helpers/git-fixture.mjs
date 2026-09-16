@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 function commandFailure(args, result) {
   const detail = Buffer.isBuffer(result.stderr) ? result.stderr.toString('utf8') : String(result.stderr || '');
@@ -37,6 +38,32 @@ export function createGitFixture({
     origin,
     repositoryUrl: 'https://github.com/example/station-reader',
     revision: runFixtureGit(root, ['rev-parse', 'HEAD']),
+  };
+}
+
+export function createPromisorFixture({
+  origin = 'git@github.com:Example/Station-Reader.git',
+  files = { 'package.json': '{"name":"station-reader-fixture"}\n' },
+} = {}) {
+  const source = createGitFixture({ origin, files });
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'station-git-promisor-'));
+  const remote = path.join(parent, 'remote.git');
+  const root = path.join(parent, 'partial');
+  runFixtureGit(source.root, ['clone', '--quiet', '--bare', source.root, remote]);
+  runFixtureGit(remote, ['config', 'uploadpack.allowFilter', 'true']);
+  runFixtureGit(remote, ['config', 'uploadpack.allowAnySHA1InWant', 'true']);
+  runFixtureGit(source.root, [
+    'clone', '--quiet', '--no-checkout', '--filter=blob:none', pathToFileURL(remote).href, root,
+  ]);
+  runFixtureGit(root, ['remote', 'rename', 'origin', 'promisor-source']);
+  runFixtureGit(root, ['remote', 'add', 'origin', origin]);
+  return {
+    root,
+    origin,
+    repositoryUrl: source.repositoryUrl,
+    revision: source.revision,
+    sourceRoot: source.root,
+    remote,
   };
 }
 
