@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
 status: complete
-stopped_at: Phase 1 remediation verified complete at 139/139 tests
-last_updated: "2026-09-16T19:05:55.000Z"
+stopped_at: Phase 1 final fail-closed remediation verified complete at 145/145 tests
+last_updated: "2026-09-16T19:36:27.000Z"
 progress:
   total_phases: 1
   completed_phases: 1
@@ -30,7 +30,7 @@ Phase: 01 (deterministic-immutable-commit-extraction) — COMPLETE
 Plan: 8 of 8 implementation plans complete; final remediation verified
 **Milestone:** v1.0 Part 02 deterministic Station substrate — COMPLETE
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
-**Status:** Complete after focused, cumulative, static, schema, isolation, scope, core, default-CLI, and archive gates passed
+**Status:** Complete after final fail-closed focused, 145-test cumulative, static, schema, isolation, scope, core, default-CLI, and archive gates passed
 **Plans:** 8/8 complete; 01-08 verification closed
 **Requirement coverage:** 16/16 complete
 **Current focus:** None; Phase 1 is ready for downstream host-integration planning.
@@ -99,6 +99,10 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-08 remediation]: Authenticate resolved generations from exact artifact hashes and revalidate every receipt/evidence/map identity binding. — A coherent rewrite must not become authoritative merely by renaming a generation directory.
 - [Phase 01-08 remediation]: Preserve a newer concurrent publisher's CURRENT authority and retain accurate recovery material after commit durability failures. — Rollback may restore only the failed publisher's own pointer identity.
 - [Phase 01-08 remediation]: Prove local-object-only behavior with a real provider-free promisor fixture whose promised blob fails under `GIT_NO_LAZY_FETCH`, remains absent after extraction, and hydrates only in the explicit control read. — Missing-object tests now discriminate disabled lazy fetch from ordinary absence.
+- [Phase 01-08 final remediation]: Reconstruct the complete resolved map from evidence and compare the entire canonical receipt rather than maintaining a second partial binding checklist. — One independent semantic seam now covers package roots, evidence sets, labels, relations, fallback, counts, revision, tree, mode, and artifact hashes.
+- [Phase 01-08 final remediation]: Hold an atomic same-directory publication lock across final authority checks, CURRENT rename, cleanup, and rollback. — No second publisher can commit inside another publisher's check-to-rename or rollback interval.
+- [Phase 01-08 final remediation]: Arm rollback blocking material before CURRENT rename and treat every post-rename inspection error as recovery-required. — Failed or interrupted candidates are never silently readable, while restored prior authority remains available.
+- [Phase 01-08 final remediation]: Treat every unsupported-path manifest candidate as whole-project path fallback even when valid root and workspace manifests also exist. — Detailed topology cannot silently omit traversal-shaped or non-UTF-8 manifest inventory.
 
 ## Performance Metrics
 
@@ -115,8 +119,8 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T19:05:55.000Z
-- **Stopped at:** Phase 1 remediation complete; all 139 Station tests and isolation gates passed
+- **Last session:** 2026-09-16T19:36:27.000Z
+- **Stopped at:** Phase 1 final fail-closed remediation complete; all 145 Station tests and isolation gates passed
 - **Resume file:** `.planning/phases/01-deterministic-immutable-commit-extraction/01-08-SUMMARY.md`
 
 ## Next Action

@@ -12,7 +12,7 @@ provides:
   - Explicit 64-row independent evidence/map tamper matrix with zero publication calls
   - Explicit 26-row immutable-generation/CURRENT failure, interruption, concurrency, and recovery matrix
   - Explicit 26-row no-network/import/Git-command/default-core isolation matrix
-  - Final Phase 1 evidence: 139/139 provider-free Station tests, zero skips, unchanged default core tree and archive
+  - Final Phase 1 evidence: 145/145 provider-free Station tests, zero skips, unchanged default core tree and archive
 
 affects: [phase-01-completion, future-station-host-integration]
 
@@ -54,7 +54,7 @@ patterns-established:
 requirements-completed: [BOUND-01, TEST-02]
 verification_status: passed
 remediation_started: 2026-09-16T18:42:53Z
-remediation_completed: 2026-09-16T19:05:55Z
+remediation_completed: 2026-09-16T19:36:27Z
 
 duration: 16 min
 completed: 2026-09-16
@@ -62,7 +62,7 @@ completed: 2026-09-16
 
 # Phase 1 Plan 8: Adversarial Closure and Isolation Proof Summary
 
-> **Verification status: PASSED — remediation complete.** Generation authentication, concurrent-publisher authority, selected control-path diagnostics, generic canonical repository support, and partial-clone discrimination are implemented and covered by the final gates.
+> **Verification status: PASSED — final fail-closed remediation complete.** Resolved-generation semantic reconstruction, serialized publication/rollback, deterministic recovery blocking, SCP-like credential redaction, hostile manifest-path accounting, and all prior closure guarantees are implemented and covered by the final gates.
 
 **Plan 01-08 now provides executable, provider-free evidence for hostile extraction, tamper rejection, atomic publication, integration isolation, and fail-closed local-promisor behavior.**
 
@@ -75,6 +75,22 @@ The reopened review blockers are closed:
 3. Selected control-character paths produce the typed whole-project `station-fallback/path-unsupported` result without partial topology.
 4. Canonical arbitrary-host HTTPS, SSH URI, and SCP repository identities pass reader, runtime contract, independent gate, projector, receipt, publication, and reread consistently; standard GitHub/Gitee normalization and credential rejection remain intact.
 5. A provider-free local `file://` promisor fixture omits the manifest blob, proves extraction fails with `station-extract/object-unavailable` while `GIT_NO_LAZY_FETCH=1` leaves it unhydrated, then proves an explicit control read without that guard hydrates the same promised object.
+
+## Final Fail-Closed Remediation Closure
+
+The final six reproducible blockers are closed:
+
+1. Resolved generations now pass an independent evidence-to-map reconstruction seam rather than a hand-maintained identity subset. The verifier checks intrinsic evidence references and package-root completeness, reconstructs exact structural/coarse rooms and relations, and compares the complete canonical receipt. Outer-address-recomputed mutations of labels, memberships, evidence sets, relation direction/scopes/provenance, counts, revision, and mode are rejected.
+2. A same-directory atomic publication lock serializes the complete preflight, CURRENT commit, cleanup, and rollback interval. A second publisher receives `station-output/publication-busy` after the first publisher's final authority check and during rollback; it can publish only after lock release.
+3. An armed rollback marker plus retained recovery/cleanup material makes every post-rename inspection, recreation, cleanup-fsync, and restoration failure deterministic. CURRENT inspection errors never imply newer authority, interrupted candidates remain blocked, and successful rollback cannot overwrite a concurrently committed publisher because concurrent publication is excluded.
+4. Integration-local redaction removes user/password material from SCP-like origins such as `user:secret@example.test:owner/repo.git`; the real CLI test proves typed JSON diagnostics contain no secret.
+5. Valid-root and valid-workspace fixtures containing traversal-shaped and non-UTF-8 manifest candidates now force exact `station-fallback/path-unsupported` whole-project fallback instead of silently omitting hostile manifest inventory from detailed topology.
+6. The focused 61-test closure set, complete 145-test Station suite, 26-row isolation matrix, syntax/schema/static/scope gates, default CLI help/inspect smoke, baseline core diff, and archive object/SHA-256 gates all pass with zero skips.
+
+### Final fail-closed RED/GREEN commits
+
+1. `8560a7f4acbdf87fc176c7fc0ddb37378976d143` — `test(station): expose final fail-closed blockers`
+2. `a8530354012decaaed470697002a956ea08a7b19` — `fix(station): close fail-closed publication gaps`
 
 ## Performance
 
@@ -178,7 +194,8 @@ The static graph permits Node built-ins, integration-local modules, and exactly 
 - `node --test integrations/vibery-station/test/station-output.test.mjs integrations/vibery-station/test/atomic-failure.test.mjs` — PASS, 28/28; zero skips.
 - Focused contracts/identity, reader, gate, projector, CLI, generation, concurrency, control-path, and promisor suites — PASS.
 - `node --test integrations/vibery-station/test/isolation.test.mjs` — PASS, 8/8; zero skips.
-- `node --test integrations/vibery-station/test/*.test.mjs` — PASS, 139/139; zero skips.
+- `node --test integrations/vibery-station/test/*.test.mjs` — PASS, 145/145; zero skips.
+- Final focused closure command (adversarial, gate, generation, atomic, CLI, and remediation suites) — PASS, 61/61; zero skips.
 - `node --check` for every integration `.mjs` file and JSON parsing for all three schemas — PASS.
 - `git diff --check bf4ed1910848eb7d887121ab2ad970551db71d97..HEAD` and worktree check — PASS.
 - `git diff --exit-code d673e8300df60a5c8166abe78787fdc78f6b8000 -- archify viewer scripts examples generated archify.zip` — PASS.
@@ -212,7 +229,7 @@ All eight plan summaries exist and Phase 1 is complete. All 16 requirements, inc
 
 ## Self-Check: PASSED
 
-The authorized branch and workspace stayed in place, remediation continued from exact HEAD `fc3a49957b4520661ce17bc27f6c2b315e7ffe18` without reset/clean, every final gate passed with zero skips, and no acceptance claim relies on an inferred row. Default Archify/core/archive surfaces remain at their approved objects and hashes.
+The authorized branch and workspace stayed in place, final remediation continued from exact clean HEAD `df6312f6c98744e4837d5b6190ee65df00c4e0de` without reset/clean/new workspace/branch, every final gate passed with zero skips, and no acceptance claim relies on an inferred row. Default Archify/core/archive surfaces remain at their approved objects and hashes.
 
 ---
 *Phase: 01-deterministic-immutable-commit-extraction*
