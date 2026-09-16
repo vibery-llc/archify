@@ -319,7 +319,7 @@ test('post-rename bundle fsync failure atomically restores prior CURRENT', async
 });
 
 test('restoration failure returns distinct diagnostic and retains deterministic recovery material', async () => {
-  const { createStationOutputOperations, publishStationGeneration } = await loadOutput();
+  const { createStationOutputOperations, publishStationGeneration, readStationGeneration } = await loadOutput();
   const fixture = createGitFixture();
   const bundleRoot = temporaryBundle();
   const old = publishStationGeneration(makeCandidate(fixture, bundleRoot));
@@ -343,8 +343,11 @@ test('restoration failure returns distinct diagnostic and retains deterministic 
   assert.match(diagnostic.evidence.candidate_generation_id, /^generation-[a-f0-9]{64}$/);
   assert.equal(diagnostic.evidence.recovery_file, `CURRENT.recovery-${diagnostic.evidence.candidate_generation_id}`);
   assert.ok(fs.existsSync(path.join(bundleRoot, diagnostic.evidence.recovery_file)));
+  assert.ok(fs.existsSync(path.join(bundleRoot, diagnostic.evidence.failure_marker)));
   assert.ok(fs.existsSync(path.join(bundleRoot, 'generations', old.generation_id)));
   assert.ok(fs.existsSync(path.join(bundleRoot, 'generations', diagnostic.evidence.candidate_generation_id)));
+  expectCode('station-output/recovery-required', () => readStationGeneration(bundleRoot));
+  expectCode('station-output/recovery-required', () => publishStationGeneration(candidate));
 });
 
 test('documents unsupported directory fsync without claiming portable durability', async () => {
