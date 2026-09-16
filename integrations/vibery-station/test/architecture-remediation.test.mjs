@@ -164,6 +164,66 @@ test('owner write, fsync, and close failures clean pre-authority material and re
   }
 });
 
+test('exclusive owner collision preserves foreign bytes and inode and reports their busy or recovery state', () => {
+  const token = '9'.repeat(64);
+  for (const [label, foreignProbe, expectedCode, expectedInspection] of [
+    ['live', () => 'foreign:1', 'station-output/publication-busy', { state: 'busy', owner_pid: 939393 }],
+    ['stale', () => { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); },
+      'station-output/publication-lock-stale', { state: 'stale-lock', recovery_token: token }],
+  ]) {
+    const fixture = createGitFixture();
+    const bundleRoot = temporaryBundle();
+    fs.mkdirSync(bundleRoot, { recursive: true });
+    const ownerPath = path.join(bundleRoot, `.station-publication.owner-${token}`);
+    const foreignBytes = ownerBytes({ token, pid: 939393, processStartIdentity: 'foreign:1' });
+    fs.writeFileSync(ownerPath, foreignBytes, { mode: 0o600 });
+    const foreignStat = fs.lstatSync(ownerPath);
+    const operations = createStationOutputOperations({
+      randomToken() { return token; },
+      processStartIdentity(pid) {
+        if (pid === process.pid) return 'publisher:1';
+        return foreignProbe();
+      },
+    });
+
+    expectCode(expectedCode, () => publishStationGeneration(candidate(fixture, bundleRoot), { operations }));
+    const afterStat = fs.lstatSync(ownerPath);
+    assert.equal(afterStat.dev, foreignStat.dev, label);
+    assert.equal(afterStat.ino, foreignStat.ino, label);
+    assert.deepEqual(fs.readFileSync(ownerPath), foreignBytes, label);
+    assert.deepEqual(inspectStationPublication(bundleRoot, { operations }), expectedInspection, label);
+  }
+});
+
+test('owner unlink followed by directory fsync EIO reports unknown durability without a missing recovery token', () => {
+  const fixture = createGitFixture();
+  const bundleRoot = temporaryBundle();
+  const token = '8'.repeat(64);
+  const operations = createStationOutputOperations({
+    randomToken() { return token; },
+    processStartIdentity() { return 'publisher:1'; },
+    fsyncDirectory(target, phase) {
+      if (phase === 'cleanup-publication-owner') {
+        throw Object.assign(new Error('owner unlink durability unknown'), { code: 'EIO' });
+      }
+      const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+      try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+    },
+  });
+
+  const result = publishStationGeneration(candidate(fixture, bundleRoot), { operations });
+  assert.equal(result.state, 'committed-durability-unknown');
+  assert.equal(result.committed, true);
+  assert.equal(result.recovery_required, false);
+  assert.equal(result.directory_fsync, 'unknown');
+  assert.equal(result.durability_claim, 'commit-observed-owner-release-durability-unknown');
+  assert.equal(Object.hasOwn(result, 'recovery_token'), false);
+  assert.deepEqual(inspectStationPublication(bundleRoot, { operations }), { state: 'idle' });
+  expectCode('station-output/recovery-token-mismatch', () => recoverStationPublication(bundleRoot, {
+    recoveryToken: token, operations,
+  }));
+});
+
 test('hard-link failure before acquisition cleans owner material and remains retryable', () => {
   const fixture = createGitFixture();
   const bundleRoot = temporaryBundle();
