@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
 status: complete
-stopped_at: Phase 1 final fail-closed remediation verified complete at 145/145 tests
-last_updated: "2026-09-16T19:36:27.000Z"
+stopped_at: Approved architecture remediation implemented; final cumulative gates pending
+last_updated: "2026-09-16T21:30:00.000Z"
 progress:
   total_phases: 1
   completed_phases: 1
@@ -30,7 +30,7 @@ Phase: 01 (deterministic-immutable-commit-extraction) — COMPLETE
 Plan: 8 of 8 implementation plans complete; final remediation verified
 **Milestone:** v1.0 Part 02 deterministic Station substrate — COMPLETE
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
-**Status:** Complete after final fail-closed focused, 145-test cumulative, static, schema, isolation, scope, core, default-CLI, and archive gates passed
+**Status:** Architecture remediation implemented; final cumulative, static, schema, isolation, scope, core, default-CLI, and archive gates pending
 **Plans:** 8/8 complete; 01-08 verification closed
 **Requirement coverage:** 16/16 complete
 **Current focus:** None; Phase 1 is ready for downstream host-integration planning.
@@ -44,7 +44,7 @@ Plan: 8 of 8 implementation plans complete; final remediation verified
 - Deterministic `station-evidence/v1`, `station-map/v1`, and `station-extraction-receipt/v1` bytes.
 - Complete one-to-five-room structural projection or one explicit coarse room.
 - Hard integrity failures publish nothing; coarse fallback is never an integrity escape hatch.
-- Three-artifact publication uses immutable generations and one atomically replaced regular-file `CURRENT` pointer; readers resolve the pointer once, prior generations remain intact, and recovery material is retained on restoration failure.
+- Three-artifact publication uses immutable generations, an owner-aware regular hard-link lock, a forward-only prepared journal, and one atomically replaced regular-file `CURRENT` pointer; readers require an external trusted generation anchor and prior generations remain intact.
 - No rendering, Viewer/UI, Unity, host registration, LLM synthesis, broad package-manager analysis, or default Archify behavior changes.
 
 ## Planning Notes
@@ -103,6 +103,10 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-08 final remediation]: Hold an atomic same-directory publication lock across final authority checks, CURRENT rename, cleanup, and rollback. — No second publisher can commit inside another publisher's check-to-rename or rollback interval.
 - [Phase 01-08 final remediation]: Arm rollback blocking material before CURRENT rename and treat every post-rename inspection error as recovery-required. — Failed or interrupted candidates are never silently readable, while restored prior authority remains available.
 - [Phase 01-08 final remediation]: Treat every unsupported-path manifest candidate as whole-project path fallback even when valid root and workspace manifests also exist. — Detailed topology cannot silently omit traversal-shaped or non-UTF-8 manifest inventory.
+- [Phase 01-08 architecture remediation]: Require a trusted external generation ID before any bundle read and compare `CURRENT` to it exactly. — A coherently recomputed replacement bundle cannot replace control-plane authority.
+- [Phase 01-08 architecture remediation]: Use a fully fsynced unique owner file plus hard link for the fixed publication lock; classify live, stale, reused-PID, and unknown owners without age expiry. — Explicit token recovery is the only stale-owner mutation path.
+- [Phase 01-08 architecture remediation]: Journal the prepared transaction before `CURRENT`, publish forward-only, and return committed-recovery-required after any known post-rename commit problem. — A committed replacement is never reported as a generic failure or rolled back.
+- [Phase 01-08 architecture remediation]: Bound workspace declarations at 512 and match only bounded manifest candidates while including the root manifest in alias collision policy. — Large unrelated inventories cannot amplify workspace selection.
 
 ## Performance Metrics
 
@@ -119,10 +123,10 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T19:36:27.000Z
-- **Stopped at:** Phase 1 final fail-closed remediation complete; all 145 Station tests and isolation gates passed
+- **Last session:** 2026-09-16T21:30:00.000Z
+- **Stopped at:** Approved architecture remediation implemented; final cumulative verification pending
 - **Resume file:** `.planning/phases/01-deterministic-immutable-commit-extraction/01-08-SUMMARY.md`
 
 ## Next Action
 
-Phase 1 is complete. Begin downstream host-integration planning only under a separately approved scope.
+Run final cumulative tests plus static, schema, isolation, scope, default/core, and archive identity gates; then record exact counts and head.

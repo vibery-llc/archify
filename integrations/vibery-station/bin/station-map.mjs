@@ -90,11 +90,50 @@ function failureEnvelope(error) {
   };
 }
 
+function publicationEnvelope(publication) {
+  return {
+    state: publication.state,
+    committed: publication.committed,
+    generation_id: publication.generation_id,
+    recovery_required: publication.recovery_required,
+    recovery_reasons: [...(publication.recovery_reasons || [])],
+  };
+}
+
 export async function runStationMap(argv = process.argv.slice(2), seams) {
   const jsonRequested = argv.includes('--json');
   try {
     const options = parseStationMapArguments(argv);
     const result = await extractStationMap(options, seams);
+    if (result.publication.state === 'authority-indeterminate') {
+      const envelope = {
+        ok: false,
+        command: 'station extract',
+        stage: 'publication',
+        publication: publicationEnvelope(result.publication),
+        diagnostics: [createStationDiagnostic({
+          code: 'station-output/authority-indeterminate',
+          severity: 'error',
+          message: 'CURRENT authority is indeterminate and requires explicit recovery inspection.',
+          subject: { stage: 'publication' },
+          supportedFixes: ['inspect publication state and recover with the retained owner token'],
+        })],
+      };
+      if (options.json) process.stdout.write(`${JSON.stringify(envelope)}\n`);
+      else process.stderr.write(`[${envelope.diagnostics[0].code}] ${envelope.diagnostics[0].message}\n`);
+      return 1;
+    }
+    if (result.publication.state === 'committed-recovery-required') {
+      const envelope = {
+        ok: true,
+        command: 'station extract',
+        publication: publicationEnvelope(result.publication),
+        receipt: result.receipt,
+      };
+      if (options.json) process.stdout.write(`${JSON.stringify(envelope)}\n`);
+      else process.stderr.write(`station extract committed ${result.publication.generation_id}; recovery cleanup required\n`);
+      return 0;
+    }
     if (options.json) process.stdout.write(result.receiptBytes);
     else process.stderr.write(`station extract committed ${result.publication.generation_id}\n`);
     return 0;

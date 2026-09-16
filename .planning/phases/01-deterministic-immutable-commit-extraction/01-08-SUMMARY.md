@@ -52,9 +52,10 @@ patterns-established:
   - "Isolation acceptance combines dynamic blockers, static import edges, child-command audit, baseline Git diff, default CLI smoke, and archive object/hash identity."
 
 requirements-completed: [BOUND-01, TEST-02]
-verification_status: passed
+verification_status: architecture-remediation-verification-pending
 remediation_started: 2026-09-16T18:42:53Z
 remediation_completed: 2026-09-16T19:36:27Z
+architecture_remediation_started: 2026-09-16T20:00:00Z
 
 duration: 16 min
 completed: 2026-09-16
@@ -65,6 +66,19 @@ completed: 2026-09-16
 > **Verification status: PASSED — final fail-closed remediation complete.** Resolved-generation semantic reconstruction, serialized publication/rollback, deterministic recovery blocking, SCP-like credential redaction, hostile manifest-path accounting, and all prior closure guarantees are implemented and covered by the final gates.
 
 **Plan 01-08 now provides executable, provider-free evidence for hostile extraction, tamper rejection, atomic publication, integration isolation, and fail-closed local-promisor behavior.**
+
+## Approved Architecture Remediation
+
+The final architecture decision replaces the earlier bundle-self-authentication and rollback model:
+
+1. `readStationGeneration` now requires a trusted external `expectedGenerationId` before any filesystem read, requires an exact `CURRENT` match, then performs the existing exact-byte, generation hash, complete evidence-to-map reconstruction, and receipt checks. A coherent replacement generation cannot satisfy an older external anchor.
+2. Publication uses a regular fixed lock acquired by hard-linking a fully written and fsynced unique owner file. Canonical owner metadata binds schema, random token, PID, and process-start identity. Live owners are busy; dead and reused-PID owners are typed stale locks; unknown/EPERM/EIO identity is recovery-required; no age timeout exists.
+3. A canonical prepared transaction journal is durably written before `CURRENT` rename. Publication is forward-only after rename. Known post-rename fsync, marker, cleanup, and lock-release failures return `committed-recovery-required` with `committed: true`; ambiguous rename authority returns `authority-indeterminate`; neither path performs rollback.
+4. Read-only inspection and explicit token recovery reattest the stale owner's exact token, bytes, and inode before cleanup. Recovery interruption is retryable, immutable generations are preserved, regular-file fsync is mandatory, and unsupported directory fsync only downgrades the durability claim.
+5. Workspace declarations are bounded at 512 patterns; 513 uses `station-fallback/workspace-pattern-unsupported` before selection. Exact and wildcard matching use only the bounded manifest-candidate inventory, root `package.json` participates in case/NFC collision policy in both producer and independent gate, and large unrelated inventories are not selection-scanned.
+6. SCP diagnostics redact both username-only and username/password userinfo. The CLI exposes committed-recovery-required as successful committed replacement state and authority-indeterminate as a typed publication failure state.
+
+Executable coverage includes coherent replacement anchors; regular hard-link lock shape; live, stale, reused PID, EPERM, and EIO owner states; two-publisher exclusion; SIGKILL before/after rename; rename ambiguity; post-commit fsync/cleanup/release failure; interrupted recovery; mandatory file fsync; directory-fsync downgrade; 512/513 pattern boundaries; root aliases; candidate-only matching over a 20,000-file non-manifest inventory; and valid-root traversal/non-UTF-8 candidates.
 
 ## Final Remediation Closure
 
