@@ -438,6 +438,32 @@ test('contradictory prepared and committed markers are indeterminate and preserv
   assert.deepEqual(publicationControlSnapshot(bundleRoot), before);
 });
 
+test('malicious partial committed marker remains indeterminate and is preserved byte-for-byte', () => {
+  const fixture = createGitFixture();
+  const bundleRoot = temporaryBundle();
+  const published = publishStationGeneration(candidate(fixture, bundleRoot));
+  const owner = seedLock(bundleRoot, { token: '3'.repeat(64), pid: 727272, processStartIdentity: 'boot:450' });
+  const nextGeneration = `generation-${'4'.repeat(64)}`;
+  fs.writeFileSync(path.join(bundleRoot, '.station-publication.transaction'), transactionBytes(
+    'journal', owner.token, published.generation_id, nextGeneration,
+  ));
+  const contradictory = transactionBytes(
+    'committed', owner.token, published.generation_id, `generation-${'5'.repeat(64)}`,
+  ).subarray(0, 96);
+  fs.writeFileSync(path.join(bundleRoot, '.station-publication.committed'), contradictory);
+  const operations = createStationOutputOperations({
+    processStartIdentity() { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); },
+  });
+  const before = publicationControlSnapshot(bundleRoot);
+  assert.deepEqual(inspectStationPublication(bundleRoot, { operations }), {
+    state: 'authority-indeterminate', recovery_token: owner.token,
+  });
+  expectCode('station-output/authority-indeterminate', () => recoverStationPublication(bundleRoot, {
+    recoveryToken: owner.token, operations,
+  }));
+  assert.deepEqual(publicationControlSnapshot(bundleRoot), before);
+});
+
 test('matching prepared and committed markers remain explicitly recoverable', () => {
   const fixture = createGitFixture();
   const bundleRoot = temporaryBundle();

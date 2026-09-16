@@ -26,7 +26,8 @@ export const ATOMIC_FAILURE_MATRIX = Object.freeze([
   'post-commit-lock-release', 'interrupt-before-pointer-rename', 'interrupt-after-pointer-rename',
   'recovery-interruption', 'directory-fsync-downgrade', 'prior-generations-retained',
   'first-publication-crash', 'first-publication-parent-fsync-failure',
-  'first-publication-parent-fsync-unsupported',
+  'first-publication-parent-fsync-unsupported', 'first-publication-restart-chain-recovery',
+  'partial-committed-marker-recovery',
 ]);
 const covered = new Set();
 function cover(...rows) { rows.forEach((row) => { assert.ok(ATOMIC_FAILURE_MATRIX.includes(row)); covered.add(row); }); }
@@ -69,7 +70,7 @@ function childProgram(event) {
   }).map(([key, relative]) => [key, pathToFileURL(path.resolve(root, relative)).href]));
   return `
     import fs from 'node:fs';
-    import { publishStationGeneration } from ${JSON.stringify(urls.output)};
+    import { createStationOutputOperations, publishStationGeneration } from ${JSON.stringify(urls.output)};
     import { createGitObjectReader } from ${JSON.stringify(urls.reader)};
     import { buildStationEvidence } from ${JSON.stringify(urls.evidence)};
     import { projectStationMap } from ${JSON.stringify(urls.projector)};
@@ -81,7 +82,40 @@ function childProgram(event) {
     const map = projectStationMap(evidence.value, evidence.bytes);
     const gate = gateStationArtifacts(evidence.bytes, map.bytes, readerSession);
     const receipt = buildStationReceipt(gate);
+    const crashEvent = ${JSON.stringify(event)};
+    let committedDescriptor;
+    const operations = createStationOutputOperations({
+      openExclusive(target) {
+        const descriptor = fs.openSync(target, 'wx', 0o600);
+        if (target.endsWith('.station-publication.committed')) committedDescriptor = descriptor;
+        return descriptor;
+      },
+      write(descriptor, bytes, offset) {
+        if (crashEvent === 'partial-committed-write' && descriptor === committedDescriptor) {
+          const written = fs.writeSync(descriptor, bytes, offset, Math.max(1, Math.floor((bytes.length - offset) / 2)));
+          process.kill(process.pid, 'SIGKILL');
+          return written;
+        }
+        return fs.writeSync(descriptor, bytes, offset, bytes.length - offset);
+      },
+      fsyncFile(descriptor, target) {
+        fs.fsyncSync(descriptor);
+        if (crashEvent === 'committed-marker-fsync' && descriptor === committedDescriptor) process.kill(process.pid, 'SIGKILL');
+      },
+      close(descriptor) {
+        fs.closeSync(descriptor);
+        if (crashEvent === 'committed-marker-close' && descriptor === committedDescriptor) process.kill(process.pid, 'SIGKILL');
+      },
+      fsyncDirectory(target) {
+        if (crashEvent === 'first-parent-fsync-eio' && target === release) {
+          throw Object.assign(new Error('original ancestor fsync failed'), { code: 'EIO' });
+        }
+        const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+        try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+      },
+    });
     publishStationGeneration({ bundleRoot, evidenceBytes: gate.evidence_bytes, mapBytes: gate.map_bytes, receiptBytes: receipt.bytes, readerSession, protectedPaths: [repoRoot] }, {
+      operations,
       barrier(name) {
         if (name !== ${JSON.stringify(event)}) return;
         if (ready === 'KILL') process.kill(process.pid, 'SIGKILL');
@@ -282,6 +316,71 @@ test('first publication parent fsync EIO fails before authority and remains retr
   assert.equal(fs.existsSync(path.join(bundleRoot, 'CURRENT')), false);
   assert.equal(publishStationGeneration(publication).state, 'committed');
   cover('first-publication-parent-fsync-failure');
+});
+
+test('process restart retry fsyncs the original creation ancestor before claiming complete durability', () => {
+  assert.notEqual(process.platform, 'win32');
+  const fixture = createGitFixture();
+  const existingParent = fs.mkdtempSync(path.join(os.tmpdir(), 'station-restart-parent-'));
+  const bundleRoot = path.join(existingParent, 'nested', 'bundle');
+  const publication = candidate(fixture, bundleRoot);
+  const child = spawnSync(process.execPath, [
+    '--input-type=module', '-e', childProgram('first-parent-fsync-eio'),
+    fixture.root, fixture.repositoryUrl, fixture.revision, bundleRoot, 'unused', existingParent,
+  ], { encoding: 'utf8', shell: false });
+  assert.equal(child.status, 1, child.stderr);
+  assert.equal(fs.existsSync(bundleRoot), true);
+  assert.equal(fs.existsSync(path.join(bundleRoot, 'CURRENT')), false);
+
+  const syncs = [];
+  const result = publishStationGeneration(publication, {
+    operations: createStationOutputOperations({
+      fsyncDirectory(target, phase) {
+        syncs.push({ target, phase });
+        const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+        try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+      },
+    }),
+  });
+  assert.equal(result.state, 'committed');
+  assert.equal(result.directory_fsync, 'complete');
+  assert.ok(syncs.some(({ target, phase }) => target === existingParent
+    && phase === 'publish-bundle-root-parent-chain'), JSON.stringify(syncs));
+  cover('first-publication-restart-chain-recovery');
+});
+
+test('partial committed-marker write, close, and fsync crashes recover and permit a later publication', () => {
+  assert.notEqual(process.platform, 'win32');
+  for (const event of ['partial-committed-write', 'committed-marker-close', 'committed-marker-fsync']) {
+    const fixture = createGitFixture();
+    const bundleRoot = temporaryBundle();
+    const old = publishStationGeneration(candidate(fixture, bundleRoot));
+    nextCandidate(fixture, bundleRoot, event);
+    const child = spawnSync(process.execPath, [
+      '--input-type=module', '-e', childProgram(event),
+      fixture.root, fixture.repositoryUrl, fixture.revision, bundleRoot, 'unused', 'unused',
+    ], { encoding: 'utf8', shell: false });
+    assert.equal(child.signal, 'SIGKILL', `${event}: ${child.stderr}`);
+    const generationId = fs.readFileSync(path.join(bundleRoot, 'CURRENT'), 'utf8').trim();
+    assert.notEqual(generationId, old.generation_id, event);
+    if (event === 'partial-committed-write') {
+      assert.throws(() => JSON.parse(fs.readFileSync(path.join(bundleRoot, '.station-publication.committed'), 'utf8')), event);
+    }
+    const inspection = inspectStationPublication(bundleRoot);
+    assert.deepEqual(inspection, {
+      state: 'committed-recovery-required',
+      recovery_token: inspection.recovery_token,
+      generation_id: generationId,
+    }, event);
+    assert.match(inspection.recovery_token, /^[a-f0-9]{64}$/, event);
+    assert.deepEqual(recoverStationPublication(bundleRoot, { recoveryToken: inspection.recovery_token }), {
+      state: 'recovered', committed: true, generation_id: generationId, directory_fsync: 'complete',
+    }, event);
+    assert.equal(read(bundleRoot, generationId).generation_id, generationId, event);
+    const retry = publishStationGeneration(nextCandidate(fixture, bundleRoot, `${event}-retry`));
+    assert.equal(retry.state, 'committed', event);
+  }
+  cover('partial-committed-marker-recovery');
 });
 
 test('unsupported first publication parent fsync explicitly downgrades durability wording', () => {
