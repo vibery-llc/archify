@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
-import { sha256Hex } from '../lib/canonical-json.mjs';
+import { canonicalJsonBytes, sha256Hex } from '../lib/canonical-json.mjs';
+import { deriveSnapshotId } from '../lib/identity.mjs';
 import { buildStationReceipt } from '../lib/extract.mjs';
 import { createGitObjectReader } from '../lib/git-object-reader.mjs';
 import { gateStationArtifacts } from '../lib/station-gate.mjs';
@@ -69,6 +70,29 @@ function artifactPaths(bundleRoot, generationId) {
     map: path.join(root, 'station-map.json'),
     receipt: path.join(root, 'station-receipt.json'),
   };
+}
+
+function rewriteGeneration(bundleRoot, generationId, values, deriveStationGenerationId) {
+  const current = artifactPaths(bundleRoot, generationId);
+  const bytes = {
+    evidenceBytes: canonicalJsonBytes(values.evidence),
+    mapBytes: canonicalJsonBytes(values.map),
+    receiptBytes: canonicalJsonBytes(values.receipt),
+  };
+  for (const [field, target] of [
+    ['evidenceBytes', current.evidence],
+    ['mapBytes', current.map],
+    ['receiptBytes', current.receipt],
+  ]) fs.writeFileSync(target, bytes[field]);
+  const rewrittenId = deriveStationGenerationId({
+    evidence: sha256Hex(bytes.evidenceBytes),
+    map: sha256Hex(bytes.mapBytes),
+    receipt: sha256Hex(bytes.receiptBytes),
+  });
+  const rewrittenRoot = path.join(bundleRoot, 'generations', rewrittenId);
+  fs.renameSync(current.root, rewrittenRoot);
+  fs.writeFileSync(path.join(bundleRoot, 'CURRENT'), `${rewrittenId}\n`);
+  return { rewrittenId, bytes };
 }
 
 function waitForFile(file, timeout = 5000) {
@@ -164,6 +188,82 @@ test('receipt binding covers exact evidence/map hashes and counts but never itse
   const tampered = { ...candidate, receiptBytes: Buffer.from(candidate.receiptBytes) };
   tampered.receiptBytes[tampered.receiptBytes.indexOf(Buffer.from('station-map.json'))] = 0x58;
   expectCode('station-output/candidate-invalid', () => publishStationGeneration(tampered));
+});
+
+test('reader authenticates CURRENT against the content-derived generation ID after coherent map and receipt tampering', async () => {
+  const { publishStationGeneration, readStationGeneration } = await loadOutput();
+  const fixture = createGitFixture();
+  const bundleRoot = temporaryBundle();
+  const candidate = makeCandidate(fixture, bundleRoot);
+  const published = publishStationGeneration(candidate);
+  const paths = artifactPaths(bundleRoot, published.generation_id);
+  const map = JSON.parse(fs.readFileSync(paths.map, 'utf8'));
+  const receipt = JSON.parse(fs.readFileSync(paths.receipt, 'utf8'));
+  map.project.label = 'coherently-tampered-label';
+  const mapBytes = canonicalJsonBytes(map);
+  receipt.artifacts.map.sha256 = sha256Hex(mapBytes);
+  receipt.artifacts.map.bytes = mapBytes.length;
+  fs.writeFileSync(paths.map, mapBytes);
+  fs.writeFileSync(paths.receipt, canonicalJsonBytes(receipt));
+
+  expectCode('station-output/pointer-invalid', () => readStationGeneration(bundleRoot));
+});
+
+test('reader rejects a coherently rebound tree identity when CURRENT still names the original generation', async () => {
+  const { publishStationGeneration, readStationGeneration } = await loadOutput();
+  const fixture = createGitFixture();
+  const bundleRoot = temporaryBundle();
+  const candidate = makeCandidate(fixture, bundleRoot);
+  const published = publishStationGeneration(candidate);
+  const paths = artifactPaths(bundleRoot, published.generation_id);
+  const evidence = JSON.parse(fs.readFileSync(paths.evidence, 'utf8'));
+  const map = JSON.parse(fs.readFileSync(paths.map, 'utf8'));
+  const receipt = JSON.parse(fs.readFileSync(paths.receipt, 'utf8'));
+  evidence.repository.tree_oid = 'f'.repeat(40);
+  const evidenceBytes = canonicalJsonBytes(evidence);
+  map.snapshot.evidence_sha256 = sha256Hex(evidenceBytes);
+  map.snapshot.id = deriveSnapshotId(
+    map.project.id,
+    map.snapshot.revision,
+    map.snapshot.evidence_sha256,
+    map.snapshot.profile,
+  );
+  const mapBytes = canonicalJsonBytes(map);
+  receipt.repository.tree_oid = evidence.repository.tree_oid;
+  receipt.artifacts.evidence.sha256 = sha256Hex(evidenceBytes);
+  receipt.artifacts.evidence.bytes = evidenceBytes.length;
+  receipt.artifacts.map.sha256 = sha256Hex(mapBytes);
+  receipt.artifacts.map.bytes = mapBytes.length;
+  receipt.result.snapshot_id = map.snapshot.id;
+  fs.writeFileSync(paths.evidence, evidenceBytes);
+  fs.writeFileSync(paths.map, mapBytes);
+  fs.writeFileSync(paths.receipt, canonicalJsonBytes(receipt));
+
+  expectCode('station-output/pointer-invalid', () => readStationGeneration(bundleRoot));
+});
+
+test('reader cross-checks receipt tree, project, mode, and counts after generation authentication', async () => {
+  const { deriveStationGenerationId, publishStationGeneration, readStationGeneration } = await loadOutput();
+  const rows = [
+    ['tree', ({ receipt }) => { receipt.repository.tree_oid = 'f'.repeat(40); }],
+    ['project', ({ receipt }) => { receipt.result.project_id = `project-${'f'.repeat(64)}`; }],
+    ['counts', ({ receipt }) => { receipt.result.relations += 1; }],
+  ];
+  for (const [label, mutate] of rows) {
+    const fixture = createGitFixture();
+    const bundleRoot = temporaryBundle();
+    const published = publishStationGeneration(makeCandidate(fixture, bundleRoot));
+    const paths = artifactPaths(bundleRoot, published.generation_id);
+    const values = {
+      evidence: JSON.parse(fs.readFileSync(paths.evidence, 'utf8')),
+      map: JSON.parse(fs.readFileSync(paths.map, 'utf8')),
+      receipt: JSON.parse(fs.readFileSync(paths.receipt, 'utf8')),
+    };
+    mutate(values);
+    rewriteGeneration(bundleRoot, published.generation_id, values, deriveStationGenerationId);
+    expectCode('station-output/pointer-invalid', () => readStationGeneration(bundleRoot));
+    assert.ok(fs.existsSync(path.join(bundleRoot, 'CURRENT')), label);
+  }
 });
 
 test('reuses an identical generation without rewriting it and rejects a conflicting one', async () => {
