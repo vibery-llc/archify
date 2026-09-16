@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { canonicalJsonBytes, sha256Hex } from '../lib/canonical-json.mjs';
 import { deriveEvidenceId, deriveProjectId } from '../lib/identity.mjs';
+import { createGitObjectReader } from '../lib/git-object-reader.mjs';
+import { createGitFixture } from './helpers/git-fixture.mjs';
 
 const REPOSITORY_URL = 'https://github.com/example/station-reader';
 const REVISION = 'a'.repeat(40);
@@ -353,4 +355,158 @@ test('propagates stat, unavailable-object, and probe/read mismatch failures inst
     }).reader),
     /mismatch/i,
   );
+});
+
+test('emits exact scoped declarations, evidence links, and canonical ledger bytes', async () => {
+  const { buildStationEvidence } = await loadBuilder();
+  const files = {
+    'package.json': manifest({
+      name: '@example/root',
+      private: true,
+      workspaces: ['packages/*'],
+      dependencies: { '@example/a': 'workspace:*', zed: '^1' },
+      devDependencies: { '@example/a': 'workspace:*', alpha: '^2' },
+      optionalDependencies: { zed: '^1' },
+      peerDependencies: { '@example/a': 'workspace:*' },
+      scripts: { postinstall: 'must-not-run' },
+      imports: { '#internal': './src/index.js' },
+    }),
+    'packages/a/package.json': manifest({
+      name: '@example/a',
+      dependencies: { external: '^3' },
+    }),
+  };
+  const { reader } = fakeReader(files);
+  const result = buildStationEvidence(reader);
+
+  assert.deepEqual(result.value.packages.map(({ root, name, private: privateValue, workspace_pattern, declared_dependencies }) => ({
+    root,
+    name,
+    ...(privateValue === undefined ? {} : { private: privateValue }),
+    workspace_pattern,
+    declared_dependencies,
+  })), [{
+    root: '.',
+    name: '@example/root',
+    private: true,
+    workspace_pattern: 'root-package',
+    declared_dependencies: [
+      { name: '@example/a', scopes: ['dependencies', 'devDependencies', 'peerDependencies'] },
+      { name: 'alpha', scopes: ['devDependencies'] },
+      { name: 'zed', scopes: ['dependencies', 'optionalDependencies'] },
+    ],
+  }, {
+    root: 'packages/a',
+    name: '@example/a',
+    workspace_pattern: 'packages/*',
+    declared_dependencies: [{ name: 'external', scopes: ['dependencies'] }],
+  }]);
+
+  const fileById = new Map(result.value.files.map((file) => [file.id, file]));
+  for (const packageRecord of result.value.packages) {
+    const file = fileById.get(packageRecord.manifest_evidence_id);
+    assert.ok(file);
+    assert.equal(file.path, packageRecord.root === '.' ? 'package.json' : `${packageRecord.root}/package.json`);
+    assert.equal(file.id, deriveEvidenceId(file.path, file.git_oid));
+    assert.equal(file.bytes, files[file.path].bytes.length);
+    assert.equal(file.sha256, sha256Hex(files[file.path].bytes));
+  }
+  assert.deepEqual(result.bytes, canonicalJsonBytes(result.value));
+  assert.equal(result.bytes.at(-1), 0x0a);
+});
+
+test('sorts package and declaration facts independently of source key and workspace order', async () => {
+  const { buildStationEvidence } = await loadBuilder();
+  const left = buildStationEvidence(fakeReader({
+    'package.json': manifest({
+      name: 'root',
+      workspaces: ['z/*', 'a/*'],
+      peerDependencies: { beta: '1', alpha: '1' },
+      dependencies: { alpha: '1' },
+    }),
+    'a/one/package.json': manifest({ private: false, name: 'one', devDependencies: { zed: '1', alpha: '1' } }),
+    'z/two/package.json': manifest({ name: 'two' }),
+  }).reader).value;
+  const right = buildStationEvidence(fakeReader({
+    'package.json': manifest({
+      dependencies: { alpha: '1' },
+      peerDependencies: { alpha: '1', beta: '1' },
+      workspaces: ['a/*', 'z/*'],
+      name: 'root',
+    }),
+    'a/one/package.json': manifest({ devDependencies: { alpha: '1', zed: '1' }, name: 'one', private: false }),
+    'z/two/package.json': manifest({ name: 'two', scripts: { test: 'ignored' } }),
+  }).reader).value;
+
+  assert.deepEqual(left.workspace, right.workspace);
+  assert.deepEqual(left.packages, right.packages);
+  assert.deepEqual(left.packages.map(({ root }) => root), ['.', 'a/one', 'z/two']);
+  assert.deepEqual(left.packages[0].declared_dependencies, [
+    { name: 'alpha', scopes: ['dependencies', 'peerDependencies'] },
+    { name: 'beta', scopes: ['peerDependencies'] },
+  ]);
+});
+
+test('duplicate package names and conflicting scoped declarations force explicit whole-project ambiguity fallback', async () => {
+  const { buildStationEvidence } = await loadBuilder();
+  const duplicate = buildStationEvidence(fakeReader({
+    'package.json': manifest({ name: 'root', workspaces: ['packages/*'] }),
+    'packages/a/package.json': manifest({ name: 'same' }),
+    'packages/b/package.json': manifest({ name: 'same' }),
+  }).reader);
+  assertWholeProjectFallback(duplicate, ['station-fallback/package-name-ambiguous']);
+  assert.equal(duplicate.value.files.length, 3);
+
+  const conflict = buildStationEvidence(fakeReader({
+    'package.json': manifest({
+      name: 'root',
+      dependencies: { dep: '^1' },
+      peerDependencies: { dep: '^2' },
+    }),
+  }).reader);
+  assertWholeProjectFallback(conflict, ['station-fallback/package-name-ambiguous']);
+});
+
+test('aggregate excess alone is fallback while the exact eight-MiB boundary remains detailed', async () => {
+  const { buildStationEvidence } = await loadBuilder();
+  const makeAggregate = (workspaceCount) => {
+    const rootSize = 512;
+    const remaining = 8 * MiB - rootSize;
+    const baseSize = Math.floor(remaining / workspaceCount);
+    const files = {
+      'package.json': manifest({ name: 'root', workspaces: ['packages/*'] }, rootSize),
+    };
+    for (let index = 0; index < workspaceCount; index += 1) {
+      const exactRemainder = index === workspaceCount - 1 ? remaining - (baseSize * (workspaceCount - 1)) : baseSize;
+      files[`packages/p${index}/package.json`] = manifest({ name: `p${index}` }, exactRemainder);
+    }
+    return files;
+  };
+  const exact = buildStationEvidence(fakeReader(makeAggregate(8)).reader);
+  assert.equal(exact.value.analysis.detail_eligible, true);
+  const excessFiles = makeAggregate(8);
+  excessFiles['packages/extra/package.json'] = manifest({ name: 'extra' }, 64);
+  const excess = buildStationEvidence(fakeReader(excessFiles).reader);
+  assertWholeProjectFallback(excess, ['station-fallback/selected-manifest-bytes-exceeded']);
+});
+
+test('integrates with the immutable Git object reader and excludes local or volatile fields', async () => {
+  const { buildStationEvidence } = await loadBuilder();
+  const fixture = createGitFixture({
+    files: {
+      'package.json': JSON.stringify({ name: 'root', workspaces: ['packages/*'] }),
+      'packages/a/package.json': JSON.stringify({ name: 'a', dependencies: { external: '^1' } }),
+    },
+  });
+  const reader = createGitObjectReader({
+    repoRoot: fixture.root,
+    repositoryUrl: fixture.repositoryUrl,
+    revision: fixture.revision,
+  });
+  const result = buildStationEvidence(reader);
+  assert.equal(result.value.analysis.detail_eligible, true);
+  assert.deepEqual(result.value.workspace.package_roots, ['packages/a']);
+  const serialized = result.bytes.toString('utf8');
+  assert.doesNotMatch(serialized, /repoRoot|localRoot|absolute|branch|timestamp|stderr|runtime|process|scripts|imports/);
+  assert.doesNotMatch(serialized, new RegExp(fixture.root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
