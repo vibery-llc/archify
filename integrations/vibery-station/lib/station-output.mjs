@@ -475,6 +475,17 @@ function ownerFiles(operations, bundleRoot) {
   return operations.readdir(bundleRoot).filter((name) => OWNER_NAME_RE.test(name)).sort();
 }
 
+function inspectOwnerFile(operations, bundleRoot, token) {
+  const ownerPath = publicationPaths(bundleRoot, token).owner;
+  if (!exists(operations, ownerPath)) return { state: 'absent' };
+  let parsed;
+  try { parsed = exactCanonicalObject(operations, ownerPath, 'publication owner'); } catch {
+    return { state: 'unknown' };
+  }
+  if (!validOwner(parsed.value) || parsed.value.token !== token) return { state: 'unknown' };
+  return { state: attestOwner(operations, parsed.value), owner: parsed.value, ...parsed };
+}
+
 export function inspectStationPublication(bundleRootInput, { operations: suppliedOperations } = {}) {
   const operations = suppliedOperations ? createStationOutputOperations(suppliedOperations) : createStationOutputOperations();
   const bundleRoot = canonicalAuthored(bundleRootInput, 'bundle root');
@@ -483,18 +494,25 @@ export function inspectStationPublication(bundleRootInput, { operations: supplie
   const transaction = readOptionalTransaction(operations, bundleRoot);
   const current = inspectCurrentAgainstTransaction(operations, bundleRoot, transaction);
   const orphans = ownerFiles(operations, bundleRoot);
-  const recoveryToken = lock.owner?.token || transaction?.value?.token;
+  const orphanToken = orphans.length === 1 ? OWNER_NAME_RE.exec(orphans[0])?.[1] : undefined;
+  const orphan = lock.state === 'absent' && orphanToken
+    ? inspectOwnerFile(operations, bundleRoot, orphanToken) : { state: 'absent' };
+  const recoveryToken = lock.owner?.token || transaction?.value?.token || orphan?.owner?.token;
   if (current.state === 'unknown' || current.state === 'different') {
     return Object.freeze({ state: 'authority-indeterminate', ...(recoveryToken ? { recovery_token: recoveryToken } : {}) });
   }
-  if (transaction?.kind === 'invalid' || lock.state === 'unknown') {
+  if (transaction?.kind === 'invalid' || lock.state === 'unknown' || orphan.state === 'unknown' || orphans.length > 1) {
     return Object.freeze({ state: 'recovery-required', ...(recoveryToken ? { recovery_token: recoveryToken } : {}) });
   }
   if (current.state === 'candidate') {
     return Object.freeze({ state: 'committed-recovery-required', recovery_token: recoveryToken, generation_id: current.generationId });
   }
-  if (lock.state === 'live') return Object.freeze({ state: 'busy', owner_pid: lock.owner.pid });
-  if (lock.state === 'stale') return Object.freeze({ state: 'stale-lock', recovery_token: lock.owner.token });
+  if (lock.state === 'live' || orphan.state === 'live') {
+    return Object.freeze({ state: 'busy', owner_pid: (lock.owner || orphan.owner).pid });
+  }
+  if (lock.state === 'stale' || orphan.state === 'stale') {
+    return Object.freeze({ state: 'stale-lock', recovery_token: (lock.owner || orphan.owner).token });
+  }
   if (transaction || orphans.length) {
     return Object.freeze({ state: 'recovery-required', ...(recoveryToken ? { recovery_token: recoveryToken } : {}) });
   }
@@ -726,9 +744,15 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
     } else if (committedState === 'indeterminate') {
       result = publicationResult(generationId, reused, durability, 'authority-indeterminate', recoveryReasons);
     } else {
-      try { if (lock.paths.pointer) safeUnlink(operations, lock.paths.pointer, 'cleanup-pointer'); } catch { /* recovery material remains */ }
-      try { safeUnlink(operations, paths.journal, 'cleanup-transaction-journal'); } catch { /* recovery material remains */ }
-      try { safeUnlink(operations, paths.committed, 'cleanup-committed-marker'); } catch { /* recovery material remains */ }
+      let cleanupFailed = false;
+      try { if (lock.paths.pointer) safeUnlink(operations, lock.paths.pointer, 'cleanup-pointer'); } catch { cleanupFailed = true; }
+      try { safeUnlink(operations, paths.journal, 'cleanup-transaction-journal'); } catch { cleanupFailed = true; }
+      try { safeUnlink(operations, paths.committed, 'cleanup-committed-marker'); } catch { cleanupFailed = true; }
+      if (cleanupFailed) {
+        fail('station-output/recovery-required', 'Pre-commit cleanup failed; retained owner recovery is required.', {
+          recovery_token: lock.token,
+        });
+      }
       if (error instanceof StationDiagnosticError) {
         try { releasePublicationLock(operations, bundleRoot, lock, durability); } catch {
           fail('station-output/recovery-required', 'Publication lock release failed before commit.', { recovery_token: lock.token });
@@ -742,13 +766,10 @@ export function publishStationGeneration(candidate, { operations: suppliedOperat
     }
   }
 
+  if (result.state !== 'committed') return result;
   try { releasePublicationLock(operations, bundleRoot, lock, durability); } catch {
     recoveryReasons.push('publication-lock-release-failed');
-    if (result.committed === true) {
-      result = publicationResult(generationId, reused, durability, 'committed-recovery-required', recoveryReasons);
-    } else {
-      result = publicationResult(generationId, reused, durability, 'authority-indeterminate', recoveryReasons);
-    }
+    result = publicationResult(generationId, reused, durability, 'committed-recovery-required', recoveryReasons);
   }
   return result;
 }
@@ -802,7 +823,9 @@ export function recoverStationPublication(bundleRootInput, {
   const bundleRoot = canonicalAuthored(bundleRootInput, 'bundle root');
   const paths = publicationPaths(bundleRoot, recoveryToken);
   directory(operations, bundleRoot, 'bundle root');
-  const first = inspectFixedLock(operations, bundleRoot);
+  const fixed = inspectFixedLock(operations, bundleRoot);
+  const first = fixed.state === 'absent'
+    ? inspectOwnerFile(operations, bundleRoot, recoveryToken) : fixed;
   if (first.owner?.token !== recoveryToken) fail('station-output/recovery-token-mismatch', 'Recovery token does not match the retained owner.');
   if (first.state === 'live') fail('station-output/publication-busy', 'The publication owner is still live.');
   if (first.state !== 'stale') fail('station-output/recovery-required', 'Publication owner staleness cannot be attested.');
@@ -817,7 +840,9 @@ export function recoverStationPublication(bundleRootInput, {
     validateResolvedContents(contents, current.generationId);
   }
   barrier('before-recovery-reattest', { recovery_token: recoveryToken });
-  const second = inspectFixedLock(operations, bundleRoot);
+  const fixedSecond = inspectFixedLock(operations, bundleRoot);
+  const second = fixedSecond.state === 'absent'
+    ? inspectOwnerFile(operations, bundleRoot, recoveryToken) : fixedSecond;
   if (second.state !== 'stale' || second.owner.token !== recoveryToken
       || !sameIdentity(first.stat, second.stat) || !first.bytes.equals(second.bytes)) {
     fail('station-output/recovery-required', 'Recovery owner changed during token reattestation.');
