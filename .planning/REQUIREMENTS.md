@@ -13,7 +13,7 @@
 
 ### Evidence Ledger
 
-- [ ] **EVID-01**: A successful extraction emits a versioned `station-evidence/v1` ledger containing the canonical repository identity, exact commit/tree identity, extractor contract, selected manifest paths/OIDs/digests, workspace membership, package declarations, and scoped internal dependency evidence.
+- [x] **EVID-01**: A successful extraction emits a versioned `station-evidence/v1` ledger containing the canonical repository identity, exact commit/tree identity, extractor contract, selected manifest paths/OIDs/digests, workspace membership, package declarations, and scoped internal dependency evidence.
 - [x] **EVID-02**: Evidence bytes are canonical UTF-8 JSON with recursively sorted keys, contract-defined array ordering, LF line endings, exactly one trailing newline, and no timestamps, absolute paths, or runtime-specific values.
 
 ### Station Projection
@@ -72,7 +72,7 @@
 | GIT-01 | Phase 1 | Complete |
 | GIT-02 | Phase 1 | Complete |
 | GIT-03 | Phase 1 | Complete |
-| EVID-01 | Phase 1 | Pending |
+| EVID-01 | Phase 1 | Complete |
 | EVID-02 | Phase 1 | Complete |
 | MAP-01 | Phase 1 | Complete |
 | MAP-02 | Phase 1 | Pending |
@@ -93,4 +93,4 @@
 
 ---
 *Requirements defined: 2026-09-16*
-*Last updated: 2026-09-16 after Plan 01-02 immutable local Git object reader*
+*Last updated: 2026-09-16 after Plan 01-03 bounded Node workspace evidence ledger*

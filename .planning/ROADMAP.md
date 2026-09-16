@@ -1,6 +1,6 @@
 # Roadmap: Archify Station Map
 
-_Last updated: 2026-09-16 after Plan 01-02 — Active milestone: **v1.0 Part 02 deterministic Station substrate**. Source of truth: `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, and Phase 1 research at `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md`._
+_Last updated: 2026-09-16 after Plan 01-03 — Active milestone: **v1.0 Part 02 deterministic Station substrate**. Source of truth: `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, and Phase 1 research at `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md`._
 
 ## Milestone
 
@@ -48,7 +48,7 @@ _Last updated: 2026-09-16 after Plan 01-02 — Active milestone: **v1.0 Part 02 
 
 - [x] **01-01 — Isolated contracts, canonical bytes, and stable identities** (Wave 1; EVID-02, MAP-01)
 - [x] **01-02 — Immutable local Git object reader** (Wave 2; depends on 01-01; GIT-01, GIT-02, GIT-03)
-- [ ] **01-03 — Bounded Node workspace evidence ledger** (Wave 3; depends on 01-02; EVID-01)
+- [x] **01-03 — Bounded Node workspace evidence ledger** (Wave 3; depends on 01-02; EVID-01)
 - [ ] **01-04 — Complete structural projection and coarse fallback** (Wave 4; depends on 01-03; MAP-02, MAP-03)
 - [ ] **01-05 — Independent fail-closed Station gate** (Wave 5; depends on 01-04; GATE-01, GATE-02)
 - [ ] **01-06 — Receipt, CLI orchestration, and atomic bundle publication** (Wave 6; depends on 01-05; OUT-01, OUT-02)
@@ -61,7 +61,7 @@ Each v1 requirement is owned by exactly one plan. Plan-level unit tests establis
 
 | Phase | Requirements | Plans Complete | Status |
 |-------|--------------|----------------|--------|
-| 1. Deterministic Immutable-Commit Extraction | 16 | 2/8 | In Progress |
+| 1. Deterministic Immutable-Commit Extraction | 16 | 3/8 | In Progress |
 
 ## Deferred Beyond v1
 

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-09-16T15:23:00.281Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-09-16T15:37:21.939Z"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 8
-  completed_plans: 2
-  percent: 25
+  completed_plans: 3
+  percent: 38
 ---
 
 # Session State
@@ -27,13 +27,13 @@ See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.
 ## Current Position
 
 Phase: 01 (deterministic-immutable-commit-extraction) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 **Milestone:** v1.0 Part 02 deterministic Station substrate
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
 **Status:** Ready to execute
-**Plans:** 2/8 complete; next is `01-03-PLAN.md`
-**Requirement coverage:** 16/16 assigned to plans exactly once; 5 complete; 0 unmapped; 0 duplicate assignments
-**Current focus:** Plan 01-03 — bounded Node workspace evidence ledger
+**Plans:** 3/8 complete; next is `01-04-PLAN.md`
+**Requirement coverage:** 16/16 assigned to plans exactly once; 6 complete; 0 unmapped; 0 duplicate assignments
+**Current focus:** Plan 01-04 — complete structural projection and coarse fallback
 
 ## Locked Boundaries
 
@@ -79,6 +79,8 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-02]: Directly type the supplied Git object as commit before peeling so annotated-tag object IDs are rejected. — A full tag OID can satisfy revision^{commit}, so peeling alone does not prove the supplied identity is itself immutable commit evidence.
 - [Phase 01-02]: Preserve complete raw tree inventory while classifying unsupported paths; malformed or incomplete tree protocol remains a hard failure. — Coarse fallback may consume trustworthy unsupported evidence but cannot repair loss of tree completeness.
 - [Phase 01-02]: Return every discovered manifest with explicit count-policy status and exact size probes rather than truncating or partially reading. — The evidence layer can choose truthful whole-project fallback only when accounting is complete.
+- [Phase 01-03]: Represent the valid root manifest as package root `.` with the `root-package` marker while npm workspace `package_roots` contains only matched members. — This keeps every selected manifest represented without making the projector treat repository root as a workspace path group.
+- [Phase 01-03]: Treat trustworthy manifest count and size excess as whole-project fallback, but propagate object stat/read/probe inconsistencies as hard failures. — Policy may reduce detail only after immutable evidence integrity is established.
 
 ## Performance Metrics
 
@@ -86,13 +88,14 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 |------|----------|-------|-------|
 | 01-01 | 10 min | 2 | 9 |
 | Phase 01 P02 | 9 min | 2 tasks | 3 files |
+| Phase 01 P03 | 8 min | 2 tasks | 2 files |
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T15:23:00.254Z
-- **Stopped at:** Completed 01-02-PLAN.md
+- **Last session:** 2026-09-16T15:37:21.916Z
+- **Stopped at:** Completed 01-03-PLAN.md
 - **Resume file:** None
 
 ## Next Action
 
-Execute `01-03-PLAN.md` only when authorized; consume the immutable object reader without weakening its exact-size, complete-inventory, or fail-closed boundaries.
+Execute `01-04-PLAN.md` only when authorized; consume validated evidence values and exact bytes without weakening complete membership, declaration provenance, or fallback truthfulness.
