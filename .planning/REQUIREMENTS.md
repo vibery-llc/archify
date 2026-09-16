@@ -24,8 +24,8 @@
 
 ### Fail-Closed Gate
 
-- [ ] **GATE-01**: Before publication, the gate reparses the evidence and map and recomputes every ID, membership, relation, evidence reference, ordering rule, count, digest, and fallback invariant rather than trusting projector output.
-- [ ] **GATE-02**: Any integrity, identity, completeness, gate, output-path, or commit/rollback failure emits a typed diagnostic and publishes no replacement artifacts; no hard failure is downgraded to coarse fallback.
+- [x] **GATE-01**: Before publication, the gate reparses the evidence and map and recomputes every ID, membership, relation, evidence reference, ordering rule, count, digest, and fallback invariant rather than trusting projector output.
+- [x] **GATE-02**: Any integrity, identity, completeness, gate, output-path, or commit/rollback failure emits a typed diagnostic and publishes no replacement artifacts; no hard failure is downgraded to coarse fallback.
 
 ### Atomic Artifacts
 
@@ -77,8 +77,8 @@
 | MAP-01 | Phase 1 | Complete |
 | MAP-02 | Phase 1 | Complete |
 | MAP-03 | Phase 1 | Complete |
-| GATE-01 | Phase 1 | Pending |
-| GATE-02 | Phase 1 | Pending |
+| GATE-01 | Phase 1 | Complete |
+| GATE-02 | Phase 1 | Complete |
 | OUT-01 | Phase 1 | Pending |
 | OUT-02 | Phase 1 | Pending |
 | BOUND-01 | Phase 1 | Pending |
@@ -93,4 +93,4 @@
 
 ---
 *Requirements defined: 2026-09-16*
-*Last updated: 2026-09-16 after Plan 01-04 complete structural projection and coarse fallback*
+*Last updated: 2026-09-16 after Plan 01-05 independent fail-closed Station gate*

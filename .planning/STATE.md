@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-09-16T15:46:48.000Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-09-16T15:59:42.000Z"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 8
-  completed_plans: 4
-  percent: 50
+  completed_plans: 5
+  percent: 63
 ---
 
 # Session State
@@ -27,13 +27,13 @@ See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.
 ## Current Position
 
 Phase: 01 (deterministic-immutable-commit-extraction) — EXECUTING
-Plan: 5 of 8
+Plan: 6 of 8
 **Milestone:** v1.0 Part 02 deterministic Station substrate
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
 **Status:** Ready to execute
-**Plans:** 4/8 complete; next is `01-05-PLAN.md`
-**Requirement coverage:** 16/16 assigned to plans exactly once; 8 complete; 0 unmapped; 0 duplicate assignments
-**Current focus:** Plan 01-05 — independent fail-closed Station gate
+**Plans:** 5/8 complete; next is `01-06-PLAN.md`
+**Requirement coverage:** 16/16 assigned to plans exactly once; 10 complete; 0 unmapped; 0 duplicate assignments
+**Current focus:** Plan 01-06 — receipt, CLI orchestration, and atomic bundle publication
 
 ## Locked Boundaries
 
@@ -84,6 +84,9 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-04]: For npm workspaces, project exactly the complete declared workspace package-root set while retaining the root package manifest as evidence rather than inventing a root room. — Workspace topology must follow declared membership and first-path-segment structure only.
 - [Phase 01-04]: Aggregate only exact cross-room package declarations by ordered room pair, preserving sorted scopes and declaring-manifest evidence while suppressing same-room loops. — Declarations support dependency evidence, not runtime or causality claims.
 - [Phase 01-04]: Collapse every approved unsupported shape or out-of-range room count to one evidence-bound project-root room with no relations or detailed membership. — Coarse fallback must never preserve a partial topology or hide integrity defects.
+- [Phase 01-05]: Independently revalidate reader inventory, manifest policy, path accounting, selected blobs, ledger facts, and topology instead of trusting either producer artifact. — Independence must cover policy and complete facts, not only schema or identity checks.
+- [Phase 01-05]: Classify canonical representation, array order, references, evidence identity, topology identity, and unsupported claims with bounded logical diagnostics. — Stable failure classes make mutation rejection actionable without exposing local or secret data.
+- [Phase 01-05]: Return accepted Buffers through defensive-copy getters while freezing all result metadata. — Node Buffers cannot be deeply frozen, so mutation isolation must be enforced at the API boundary.
 
 ## Performance Metrics
 
@@ -93,13 +96,14 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 | Phase 01 P02 | 9 min | 2 tasks | 3 files |
 | Phase 01 P03 | 8 min | 2 tasks | 2 files |
 | Phase 01 P04 | 7 min | 2 tasks | 2 files |
+| Phase 01 P05 | 9 min | 2 tasks | 2 files |
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T15:46:48.000Z
-- **Stopped at:** Completed 01-04-PLAN.md
+- **Last session:** 2026-09-16T15:59:42.000Z
+- **Stopped at:** Completed 01-05-PLAN.md
 - **Resume file:** None
 
 ## Next Action
 
-Execute `01-05-PLAN.md` only when authorized; independently reconstruct the complete evidence ledger and structural/coarse map rather than trusting projector-authored identities or claims.
+Execute `01-06-PLAN.md` only when authorized; build receipts solely from frozen gate success and preserve one complete immutable generation across every publication failure.
