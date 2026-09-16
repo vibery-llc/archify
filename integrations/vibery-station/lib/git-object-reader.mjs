@@ -1,11 +1,25 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { TextDecoder } from 'node:util';
 import { parseRepositoryRemote, redactRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import { throwStationDiagnostic } from './diagnostics.mjs';
 
 const FULL_OID_RE = /^[a-f0-9]{40}$/;
-const COMMAND_OUTPUT_LIMIT = 16 * 1024 * 1024;
+const TREE_RECORD_RE = /^(040000|100644|100755|120000|160000) (blob|tree|commit) ([a-f0-9]{40})$/;
+const VALID_MODE_TYPES = new Set(['040000 tree', '100644 blob', '100755 blob', '120000 blob', '160000 commit']);
+const CONTROL_CHARACTER_RE = /[\u0000-\u001f\u007f]/;
+const MANIFEST_SUFFIX = Buffer.from('package.json');
+const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
+
+export const GIT_OBJECT_LIMITS = Object.freeze({
+  treeOutputBytes: 16 * 1024 * 1024,
+  manifestCount: 512,
+  manifestBytes: 1024 * 1024,
+  totalManifestBytes: 8 * 1024 * 1024,
+});
+
+const COMMAND_OUTPUT_LIMIT = GIT_OBJECT_LIMITS.treeOutputBytes;
 
 function fail(code, message, { evidence = {}, supportedFixes = [] } = {}) {
   throwStationDiagnostic({
@@ -149,6 +163,194 @@ function validateRevision(runGit, revisionInput) {
   return revision;
 }
 
+function treeFailure(code, message) {
+  fail(code, message, {
+    supportedFixes: ['make the complete commit tree available locally within the fixed reader budget'],
+  });
+}
+
+function pathHasManifestName(pathBytes) {
+  if (pathBytes.equals(MANIFEST_SUFFIX)) return true;
+  if (pathBytes.length <= MANIFEST_SUFFIX.length || pathBytes[pathBytes.length - MANIFEST_SUFFIX.length - 1] !== 0x2f) return false;
+  return pathBytes.subarray(pathBytes.length - MANIFEST_SUFFIX.length).equals(MANIFEST_SUFFIX);
+}
+
+function parseTreeInventory(output) {
+  if (output.length > GIT_OBJECT_LIMITS.treeOutputBytes) {
+    treeFailure('station-extract/tree-budget-exceeded', 'Commit tree output exceeded the fixed 16 MiB integrity ceiling.');
+  }
+  if (output.length > 0 && output[output.length - 1] !== 0) {
+    treeFailure('station-extract/tree-protocol-invalid', 'Commit tree output ended without its required NUL terminator.');
+  }
+
+  const inventory = [];
+  const seenPaths = new Set();
+  let start = 0;
+  while (start < output.length) {
+    const end = output.indexOf(0, start);
+    if (end < 0 || end === start) {
+      treeFailure('station-extract/tree-protocol-invalid', 'Commit tree output contained an empty or incomplete record.');
+    }
+    const record = output.subarray(start, end);
+    const tab = record.indexOf(0x09);
+    if (tab < 0) treeFailure('station-extract/tree-protocol-invalid', 'Commit tree output contained a record without a path delimiter.');
+    const header = record.subarray(0, tab).toString('ascii');
+    const match = TREE_RECORD_RE.exec(header);
+    if (!match || !VALID_MODE_TYPES.has(`${match?.[1]} ${match?.[2]}`)) {
+      treeFailure('station-extract/tree-protocol-invalid', 'Commit tree output contained an invalid mode, type, or object ID.');
+    }
+    const pathBytes = Buffer.from(record.subarray(tab + 1));
+    if (pathBytes.length === 0) treeFailure('station-extract/tree-protocol-invalid', 'Commit tree output contained an empty path.');
+    const pathKey = pathBytes.toString('hex');
+    if (seenPaths.has(pathKey)) treeFailure('station-extract/tree-protocol-invalid', 'Commit tree output contained a duplicate exact path.');
+    seenPaths.add(pathKey);
+
+    let decodedPath = null;
+    try {
+      decodedPath = UTF8_DECODER.decode(pathBytes);
+    } catch {
+      // Raw bytes remain authoritative; the unsupported classification is added below.
+    }
+    inventory.push({ mode: match[1], type: match[2], oid: match[3], path: decodedPath, pathBytes });
+    start = end + 1;
+  }
+
+  inventory.sort((left, right) => Buffer.compare(left.pathBytes, right.pathBytes) || (left.oid < right.oid ? -1 : left.oid > right.oid ? 1 : 0));
+  const unsupportedPaths = [];
+  const classified = new Set();
+  const classify = (entryIndex, code) => {
+    const key = `${entryIndex}\0${code}`;
+    if (classified.has(key)) return;
+    classified.add(key);
+    const entry = inventory[entryIndex];
+    unsupportedPaths.push(Object.freeze({
+      code,
+      path: entry.path,
+      pathBytesHex: entry.pathBytes.toString('hex'),
+      entryIndex,
+    }));
+  };
+
+  for (const [entryIndex, entry] of inventory.entries()) {
+    if (entry.path === null) {
+      classify(entryIndex, 'station-extract/path-encoding-unsupported');
+      continue;
+    }
+    if (CONTROL_CHARACTER_RE.test(entry.path)) classify(entryIndex, 'station-extract/path-control-unsupported');
+    const segments = entry.path.split('/');
+    if (entry.path.startsWith('/') || segments.some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git')) {
+      classify(entryIndex, 'station-extract/path-shape-unsupported');
+    }
+  }
+
+  for (const [keyForPath, code] of [
+    [(value) => value.toLowerCase(), 'station-extract/path-case-collision'],
+    [(value) => value.normalize('NFC'), 'station-extract/path-nfc-collision'],
+  ]) {
+    const groups = new Map();
+    for (const [entryIndex, entry] of inventory.entries()) {
+      if (entry.path === null) continue;
+      const key = keyForPath(entry.path);
+      const group = groups.get(key) || [];
+      group.push(entryIndex);
+      groups.set(key, group);
+    }
+    for (const indexes of groups.values()) {
+      if (indexes.length < 2) continue;
+      const exact = new Set(indexes.map((entryIndex) => inventory[entryIndex].path));
+      if (exact.size > 1) for (const entryIndex of indexes) classify(entryIndex, code);
+    }
+  }
+
+  unsupportedPaths.sort((left, right) => left.entryIndex - right.entryIndex || (left.code < right.code ? -1 : left.code > right.code ? 1 : 0));
+  const frozenInventory = inventory.map((entry) => Object.freeze(entry));
+  const manifestCandidates = frozenInventory.filter(({ pathBytes }) => pathHasManifestName(pathBytes));
+  return {
+    inventory: Object.freeze(frozenInventory),
+    unsupportedPaths: Object.freeze(unsupportedPaths),
+    manifestCandidates: Object.freeze(manifestCandidates),
+    manifestPolicy: Object.freeze({
+      discovered: manifestCandidates.length,
+      limit: GIT_OBJECT_LIMITS.manifestCount,
+      exceeded: manifestCandidates.length > GIT_OBJECT_LIMITS.manifestCount,
+    }),
+  };
+}
+
+function enumerateTree(runGit, revision) {
+  const result = runGit(['ls-tree', '-rz', '--full-tree', revision], { maxBuffer: GIT_OBJECT_LIMITS.treeOutputBytes });
+  if (result.error?.code === 'ENOBUFS' || result.stdout.length > GIT_OBJECT_LIMITS.treeOutputBytes) {
+    treeFailure('station-extract/tree-budget-exceeded', 'Commit tree output exceeded the fixed 16 MiB integrity ceiling.');
+  }
+  if (result.error || result.status !== 0) {
+    treeFailure('station-extract/tree-unreadable', 'Commit tree could not be enumerated completely from the local object database.');
+  }
+  return parseTreeInventory(result.stdout);
+}
+
+function requireObjectId(oid) {
+  if (typeof oid !== 'string' || !FULL_OID_RE.test(oid)) {
+    fail('station-extract/object-unavailable', 'Blob object ID must be one exact lowercase SHA-1 object ID.');
+  }
+  return oid;
+}
+
+function createBlobOperations(runGit) {
+  const statBlob = (oidInput) => {
+    const oid = requireObjectId(oidInput);
+    const result = runGit(['cat-file', '-s', oid], { maxBuffer: 1024 });
+    if (result.error || result.status !== 0) {
+      fail('station-extract/object-unavailable', 'Blob size is unavailable from the local object database.', {
+        evidence: { oid },
+      });
+    }
+    const text = result.stdout.toString('ascii');
+    if (!/^(?:0|[1-9][0-9]*)\n$/.test(text)) {
+      fail('station-extract/object-size-invalid', 'Blob size probe did not return one canonical non-negative decimal.', {
+        evidence: { oid },
+      });
+    }
+    const size = Number(text.slice(0, -1));
+    if (!Number.isSafeInteger(size)) {
+      fail('station-extract/object-size-invalid', 'Blob size exceeds the exact integer range supported by this contract.', {
+        evidence: { oid },
+      });
+    }
+    return size;
+  };
+
+  const readBlob = (oidInput, { expectedSize, integrityCeiling } = {}) => {
+    const oid = requireObjectId(oidInput);
+    if (!Number.isSafeInteger(expectedSize) || expectedSize < 0 || !Number.isSafeInteger(integrityCeiling) || integrityCeiling < 0) {
+      throw new TypeError('expectedSize and integrityCeiling must be non-negative safe integers.');
+    }
+    if (expectedSize > integrityCeiling) {
+      fail('station-extract/object-budget-exceeded', 'Blob read was refused because its proven size exceeds the integrity ceiling.', {
+        evidence: { oid, expectedSize, integrityCeiling },
+      });
+    }
+    const processCeiling = Math.max(64 * 1024, integrityCeiling + 1);
+    const result = runGit(['cat-file', 'blob', oid], { maxBuffer: processCeiling });
+    if (result.error?.code === 'ENOBUFS' || result.stdout.length > integrityCeiling) {
+      fail('station-extract/object-budget-exceeded', 'Blob output exceeded the caller-provided integrity ceiling.', {
+        evidence: { oid, expectedSize, integrityCeiling },
+      });
+    }
+    if (result.error || result.status !== 0) {
+      fail('station-extract/object-unavailable', 'Blob bytes are unavailable from the local object database.', {
+        evidence: { oid },
+      });
+    }
+    if (result.stdout.length !== expectedSize) {
+      fail('station-extract/object-size-mismatch', 'Blob byte count disagrees with its exact prior size probe.', {
+        evidence: { oid, expectedSize, actualSize: result.stdout.length },
+      });
+    }
+    return Buffer.from(result.stdout);
+  };
+  return { statBlob, readBlob };
+}
+
 export function createGitObjectReader({ repoRoot, repositoryUrl, revision: revisionInput } = {}, { processRunner = spawnSync } = {}) {
   if (typeof processRunner !== 'function') throw new TypeError('processRunner must be a function.');
   const realRoot = resolveTopLevel(repoRoot);
@@ -199,7 +401,12 @@ export function createGitObjectReader({ repoRoot, repositoryUrl, revision: revis
     });
   }
 
+  const tree = enumerateTree(runGit, revision);
+  const blobs = createBlobOperations(runGit);
   return Object.freeze({
     repository: Object.freeze({ url, revision, treeOid, objectFormat }),
+    limits: GIT_OBJECT_LIMITS,
+    ...tree,
+    ...blobs,
   });
 }

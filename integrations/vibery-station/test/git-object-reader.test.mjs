@@ -264,7 +264,7 @@ test('classifies invalid UTF-8, unsafe shapes, and case/NFC aliases without drop
     processRunner: treeRunner(fixture, bufferResult({ stdout: Buffer.concat(records) })),
   });
   assert.equal(reader.inventory.length, records.length);
-  assert.equal(reader.inventory[0].path, null);
+  assert.equal(reader.inventory.filter(({ path: candidate }) => candidate === null).length, 1);
   assert.deepEqual(new Set(reader.unsupportedPaths.map(({ code }) => code)), new Set([
     'station-extract/path-encoding-unsupported',
     'station-extract/path-shape-unsupported',
