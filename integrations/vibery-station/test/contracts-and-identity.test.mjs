@@ -23,6 +23,22 @@ async function loadContracts() {
   }
 }
 
+async function loadCanonicalJson() {
+  try {
+    return await import('../lib/canonical-json.mjs');
+  } catch (error) {
+    assert.fail(`canonical JSON module must implement exact bytes: ${error.message}`);
+  }
+}
+
+async function loadIdentity() {
+  try {
+    return await import('../lib/identity.mjs');
+  } catch (error) {
+    assert.fail(`identity module must implement versioned formulas: ${error.message}`);
+  }
+}
+
 function validLimits() {
   return {
     max_tree_bytes: 16 * 1024 * 1024,
@@ -356,4 +372,198 @@ test('diagnostics use the exact Station envelope and schema failures expose it',
     assert.equal(error.diagnostic.evidence.path, '/extra');
     return true;
   });
+});
+
+test('canonical JSON emits exact compact UTF-8 bytes with one trailing LF', async () => {
+  const { canonicalJsonBytes, canonicalJsonText } = await loadCanonicalJson();
+  const value = {
+    zebra: 1,
+    alpha: { 'ä': 2, z: 1 },
+    array: [{ b: true, a: null }, 'x'],
+  };
+  const expected = Buffer.from('{"alpha":{"z":1,"ä":2},"array":[{"a":null,"b":true},"x"],"zebra":1}\n', 'utf8');
+  const bytes = canonicalJsonBytes(value);
+  assert.ok(Buffer.isBuffer(bytes));
+  assert.deepEqual(bytes, expected);
+  assert.equal(canonicalJsonText(value), expected.toString('utf8'));
+  assert.equal(bytes.at(-1), 0x0a);
+  assert.notEqual(bytes.at(-2), 0x0a);
+});
+
+test('canonical JSON is equal for recursively permuted object keys and preserves arrays', async () => {
+  const { canonicalJsonBytes } = await loadCanonicalJson();
+  const left = { outer: { beta: 2, alpha: 1 }, list: ['second', 'first'] };
+  const right = { list: ['second', 'first'], outer: { alpha: 1, beta: 2 } };
+  assert.deepEqual(canonicalJsonBytes(left), canonicalJsonBytes(right));
+  assert.match(canonicalJsonBytes(left).toString('utf8'), /"list":\["second","first"\]/);
+});
+
+test('canonical JSON rejects every value outside the JSON data domain', async () => {
+  const { canonicalJsonBytes } = await loadCanonicalJson();
+  const sparse = [];
+  sparse[1] = 'present';
+  const cyclic = {};
+  cyclic.self = cyclic;
+  const symbolKey = { valid: true };
+  symbolKey[Symbol('ignored-by-json')] = true;
+  const decoratedArray = [];
+  decoratedArray.extra = true;
+
+  const invalidValues = [
+    undefined,
+    () => true,
+    Symbol('value'),
+    1n,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    { nested: undefined },
+    [undefined],
+    sparse,
+    cyclic,
+    new Date('2020-01-01T00:00:00Z'),
+    new Map([['key', 'value']]),
+    Buffer.from('not-json'),
+    symbolKey,
+    decoratedArray,
+  ];
+  for (const value of invalidValues) {
+    assert.throws(() => canonicalJsonBytes(value), /canonical JSON/i);
+  }
+});
+
+test('exact-byte SHA-256 helpers hash the supplied bytes without normalization', async () => {
+  const { sha256Bytes, sha256Hex } = await loadCanonicalJson();
+  const bytes = Buffer.from('abc', 'utf8');
+  assert.equal(sha256Hex(bytes), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  assert.deepEqual(
+    sha256Bytes(bytes),
+    Buffer.from('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', 'hex'),
+  );
+  assert.notEqual(sha256Hex(Buffer.from('abc\n', 'utf8')), sha256Hex(bytes));
+  assert.throws(() => sha256Hex('abc'), /bytes/i);
+});
+
+test('domain comparators use direct code-point ordering and documented tie breakers', async () => {
+  const {
+    compareCodePoints,
+    compareDeclarations,
+    compareEvidenceIds,
+    compareFallbackCodes,
+    compareFiles,
+    comparePackages,
+    compareRelations,
+    compareRooms,
+    compareScopes,
+  } = await loadCanonicalJson();
+
+  assert.deepEqual(['ä', 'z', 'a'].sort(compareCodePoints), ['a', 'z', 'ä']);
+  assert.deepEqual([
+    { path: 'b', git_oid: 'a' },
+    { path: 'a', git_oid: 'b' },
+    { path: 'a', git_oid: 'a' },
+  ].sort(compareFiles), [
+    { path: 'a', git_oid: 'a' },
+    { path: 'a', git_oid: 'b' },
+    { path: 'b', git_oid: 'a' },
+  ]);
+  assert.deepEqual([
+    { root: 'packages/z', name: 'a' },
+    { root: 'packages/a', name: 'z' },
+    { root: 'packages/a', name: 'a' },
+  ].sort(comparePackages).map(({ root, name }) => `${root}:${name}`), [
+    'packages/a:a',
+    'packages/a:z',
+    'packages/z:a',
+  ]);
+  assert.deepEqual([
+    { name: 'z', scope: 'dependencies' },
+    { name: 'a', scope: 'peerDependencies' },
+    { name: 'a', scope: 'dependencies' },
+  ].sort(compareDeclarations).map(({ name, scope }) => `${name}:${scope}`), [
+    'a:dependencies',
+    'a:peerDependencies',
+    'z:dependencies',
+  ]);
+  assert.deepEqual([{ id: 'room-b' }, { id: 'room-a' }].sort(compareRooms).map(({ id }) => id), ['room-a', 'room-b']);
+  assert.deepEqual([{ id: 'relation-b' }, { id: 'relation-a' }].sort(compareRelations).map(({ id }) => id), ['relation-a', 'relation-b']);
+  assert.deepEqual(['evidence-b', 'evidence-a'].sort(compareEvidenceIds), ['evidence-a', 'evidence-b']);
+  assert.deepEqual(['peerDependencies', 'dependencies'].sort(compareScopes), ['dependencies', 'peerDependencies']);
+  assert.deepEqual(['station-fallback/z', 'station-fallback/a'].sort(compareFallbackCodes), ['station-fallback/a', 'station-fallback/z']);
+});
+
+test('versioned identity formulas match fixed NUL-separated vectors', async () => {
+  const {
+    deriveEvidenceId,
+    deriveProjectId,
+    deriveRelationId,
+    deriveRoomId,
+    deriveSnapshotId,
+  } = await loadIdentity();
+  const repositoryIdentity = '["github.com","standard","repository","acme/widget"]';
+  const projectId = deriveProjectId(repositoryIdentity);
+  assert.equal(projectId, 'project-e1360725e7d03a8c31bee35794c45c940544089357cd8261e4ee8e49f0a734fd');
+  assert.equal(
+    deriveEvidenceId('packages/api/package.json', HEX_40_A),
+    'evidence-35b19ae1eed4c5017e100b706532f1eee04dea073a8032167bbbae151bb42433',
+  );
+  const fromRoomId = deriveRoomId(projectId, 'workspace-path-group:packages');
+  const toRoomId = deriveRoomId(projectId, 'workspace-path-group:apps');
+  assert.equal(fromRoomId, 'room-23d30ddddb103ef58d6c7392b0bf2a76a39853518a3a4da53c23ae0820ac4db2');
+  assert.equal(toRoomId, 'room-49ae7eba2e5643c52e4659681e5dfaaa339307450d7113ec37d897cb4eca9dde');
+  assert.equal(
+    deriveRelationId(fromRoomId, toRoomId),
+    'relation-7edc83f72f0e7a632238b074918663447a78ce8d3463849373b6325214ba37a0',
+  );
+  assert.equal(
+    deriveSnapshotId(projectId, HEX_40_B, 'c'.repeat(64), 'node-workspaces/v1'),
+    'snapshot-66b800bc0af15f8e83cb605c27761e5ee9b00e58e5af32a7531a4f740ea37056',
+  );
+});
+
+test('durable topology identities exclude revision, labels, layout, and traversal order', async () => {
+  const {
+    deriveProjectId,
+    deriveRelationId,
+    deriveRoomId,
+    deriveSnapshotId,
+  } = await loadIdentity();
+  const identity = '["github.com","standard","repository","acme/widget"]';
+  const before = {
+    project: deriveProjectId(identity),
+    label: 'Old label',
+    layout: { x: 10, y: 20 },
+    revision: HEX_40_A,
+  };
+  const after = {
+    project: deriveProjectId(identity),
+    label: 'New label',
+    layout: { x: 900, y: 1 },
+    revision: HEX_40_B,
+  };
+  const beforeRooms = ['workspace-path-group:apps', 'workspace-path-group:packages']
+    .map((key) => deriveRoomId(before.project, key));
+  const afterRooms = ['workspace-path-group:packages', 'workspace-path-group:apps']
+    .map((key) => deriveRoomId(after.project, key));
+
+  assert.equal(before.project, after.project);
+  assert.deepEqual([...beforeRooms].sort(), [...afterRooms].sort());
+  assert.equal(deriveRelationId(beforeRooms[0], beforeRooms[1]), deriveRelationId(afterRooms[1], afterRooms[0]));
+  assert.notEqual(
+    deriveSnapshotId(before.project, before.revision, HEX_64_A),
+    deriveSnapshotId(after.project, after.revision, HEX_64_A),
+  );
+  assert.notEqual(
+    deriveSnapshotId(before.project, before.revision, HEX_64_A),
+    deriveSnapshotId(before.project, before.revision, HEX_64_B),
+  );
+});
+
+test('identity inputs reject ambiguous NUL separators and malformed fixed-width facts', async () => {
+  const { deriveEvidenceId, deriveProjectId, deriveRoomId, deriveSnapshotId } = await loadIdentity();
+  assert.throws(() => deriveProjectId('identity\0suffix'), /NUL/i);
+  assert.throws(() => deriveEvidenceId('../package.json', HEX_40_A), /path/i);
+  assert.throws(() => deriveEvidenceId('package.json', 'a'.repeat(39)), /OID/i);
+  assert.throws(() => deriveRoomId(PROJECT_ID, 'group\0other'), /NUL/i);
+  assert.throws(() => deriveSnapshotId(PROJECT_ID, HEX_40_A, 'a'.repeat(63)), /SHA-256/i);
 });
