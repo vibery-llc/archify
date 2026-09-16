@@ -41,6 +41,8 @@ patterns-established:
   - "Isolation acceptance combines dynamic blockers, static import edges, child-command audit, baseline Git diff, default CLI smoke, and archive object/hash identity."
 
 requirements-completed: [BOUND-01, TEST-02]
+verification_status: blocked
+remediation_started: 2026-09-16T18:42:53Z
 
 duration: 16 min
 completed: 2026-09-16
@@ -48,7 +50,9 @@ completed: 2026-09-16
 
 # Phase 1 Plan 8: Adversarial Closure and Isolation Proof Summary
 
-**Phase 1 closes with executable, provider-free proof that hostile evidence fails or falls back exactly by policy, tampering never reaches publication, CURRENT selects complete immutable generations, and the Station profile cannot invoke or alter default Archify surfaces.**
+> **Verification status: BLOCKED — remediation in progress.** Final review found blockers in generation authentication, concurrent-publisher rollback authority, selected control-path diagnostics, generic canonical repository support, and partial-clone discrimination. The completion evidence below is historical and must not be treated as current until the remediation gates pass.
+
+**The original Plan 01-08 run produced executable, provider-free evidence for hostile extraction, tamper rejection, atomic publication, and integration isolation; final verification is reopened pending remediation.**
 
 ## Performance
 
@@ -170,7 +174,7 @@ None. No workspace/worktree/clone/branch operation, install, network request, pr
 
 ## Phase 1 Completion
 
-All eight plan summaries now exist and all 16 Phase 1 requirements have executable evidence. `BOUND-01` and `TEST-02` are complete, so Phase 1 and milestone v1.0 are eligible to be marked complete.
+All eight plan summaries exist, but Phase 1 completion is currently blocked by final verification remediation. `BOUND-01` and `TEST-02` remain implemented; their final acceptance is pending the reopened cumulative, focused, static, and isolation gates.
 
 ## Self-Check: PASSED
 

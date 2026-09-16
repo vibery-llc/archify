@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
-status: complete
-stopped_at: Completed Phase 1 and 01-08-PLAN.md
-last_updated: "2026-09-16T16:50:02.000Z"
+status: in_progress
+stopped_at: Remediating final Phase 1 verification blockers
+last_updated: "2026-09-16T18:42:53.000Z"
 progress:
   total_phases: 1
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 8
   completed_plans: 8
-  percent: 100
+  percent: 95
 ---
 
 # Session State
@@ -26,14 +26,14 @@ See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.
 
 ## Current Position
 
-Phase: 01 (deterministic-immutable-commit-extraction) — COMPLETE
-Plan: 8 of 8 complete
-**Milestone:** v1.0 Part 02 deterministic Station substrate — COMPLETE
+Phase: 01 (deterministic-immutable-commit-extraction) — VERIFICATION BLOCKED
+Plan: 8 of 8 implementation plans complete; final remediation in progress
+**Milestone:** v1.0 Part 02 deterministic Station substrate — IN PROGRESS
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
-**Status:** Complete
-**Plans:** 8/8 complete; all summaries present
-**Requirement coverage:** 16/16 assigned and complete; 0 unmapped; 0 duplicate assignments
-**Current focus:** Await Commander direction; deferred host/UI/rendering work requires a separate approved scope.
+**Status:** Blocked on final verification remediation
+**Plans:** 8/8 complete; 01-08 verification reopened
+**Requirement coverage:** 16/16 assigned; final acceptance remains pending until remediation gates pass
+**Current focus:** Remediate generation authentication, concurrent publication rollback, selected control-path typing, generic canonical repository admission, and partial-clone test evidence.
 
 ## Locked Boundaries
 
@@ -112,10 +112,10 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T16:50:02.000Z
-- **Stopped at:** Completed Phase 1 and 01-08-PLAN.md
-- **Resume file:** None
+- **Last session:** 2026-09-16T18:42:53.000Z
+- **Stopped at:** Final Phase 1 verification remediation in progress
+- **Resume file:** `.planning/phases/01-deterministic-immutable-commit-extraction/01-08-SUMMARY.md`
 
 ## Next Action
 
-Phase 1 is complete. Await Commander direction; do not begin deferred rendering, Viewer/UI, host registration, provider, remote-fetch, or broader package-manager work without a new approved Blueprint/phase.
+Complete the five final verification remediations and return Phase 1 to complete only after focused, cumulative, static, and isolation gates all pass.
