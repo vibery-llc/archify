@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibery.dev/schemas/station-evidence-v1.json",
+  "title": "Station Evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "extractor", "repository", "files", "workspace", "packages", "analysis"],
+  "properties": {
+    "schema": { "const": "station-evidence/v1" },
+    "extractor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "contract_version", "limits"],
+      "properties": {
+        "profile": { "const": "node-workspaces/v1" },
+        "contract_version": { "const": 1 },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_tree_bytes", "max_manifest_count", "max_manifest_bytes", "max_selected_manifest_bytes"],
+          "properties": {
+            "max_tree_bytes": { "const": 16777216 },
+            "max_manifest_count": { "const": 512 },
+            "max_manifest_bytes": { "const": 1048576 },
+            "max_selected_manifest_bytes": { "const": 8388608 }
+          }
+        }
+      }
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "url", "revision", "tree_oid", "object_format"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^project-[a-f0-9]{64}$" },
+        "url": { "type": "string", "pattern": "^https://(?:github\\.com|gitee\\.com)/[^/]+/[^/]+(?:/[^/]+)*$" },
+        "revision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "tree_oid": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "object_format": { "const": "sha1" }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "path", "git_oid", "sha256", "bytes"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^evidence-[a-f0-9]{64}$" },
+          "kind": { "const": "git-blob" },
+          "path": { "type": "string", "minLength": 1 },
+          "git_oid": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "bytes": { "type": "integer", "minimum": 0, "maximum": 1048576 }
+        }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "root_manifest_evidence_id", "patterns", "package_roots"],
+      "properties": {
+        "kind": { "enum": ["root-package", "npm-workspaces", "unsupported"] },
+        "root_manifest_evidence_id": {
+          "anyOf": [
+            { "type": "string", "pattern": "^evidence-[a-f0-9]{64}$" },
+            { "type": "null" }
+          ]
+        },
+        "patterns": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "package_roots": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true }
+      }
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["root", "name", "manifest_evidence_id", "workspace_pattern", "declared_dependencies"],
+        "properties": {
+          "root": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "private": { "type": "boolean" },
+          "manifest_evidence_id": { "type": "string", "pattern": "^evidence-[a-f0-9]{64}$" },
+          "workspace_pattern": { "type": "string", "minLength": 1 },
+          "declared_dependencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "scopes"],
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "scopes": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": { "enum": ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"] }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["detail_eligible", "discovered_manifest_count", "selected_manifest_count", "represented_manifest_count", "fallback_reason_codes"],
+      "properties": {
+        "detail_eligible": { "type": "boolean" },
+        "discovered_manifest_count": { "type": "integer", "minimum": 0 },
+        "selected_manifest_count": { "type": "integer", "minimum": 0 },
+        "represented_manifest_count": { "type": "integer", "minimum": 0 },
+        "fallback_reason_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "station-fallback/root-manifest-missing",
+              "station-fallback/workspace-shape-unsupported",
+              "station-fallback/workspace-pattern-unsupported",
+              "station-fallback/workspace-match-empty",
+              "station-fallback/workspace-manifest-missing",
+              "station-fallback/workspace-manifest-non-regular",
+              "station-fallback/workspace-manifest-oversized",
+              "station-fallback/workspace-manifest-binary",
+              "station-fallback/workspace-manifest-encoding-unsupported",
+              "station-fallback/workspace-manifest-invalid",
+              "station-fallback/workspace-root-ambiguous",
+              "station-fallback/path-collision",
+              "station-fallback/manifest-count-exceeded",
+              "station-fallback/selected-manifest-bytes-exceeded",
+              "station-fallback/package-name-ambiguous",
+              "station-fallback/room-count-out-of-range"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
