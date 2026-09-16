@@ -8,11 +8,11 @@ requires:
   - phase: 01-07
     provides: Clone-independent exact-byte acceptance and generic twelve-workspace topology proof
 provides:
-  - Explicit 50-row hostile Git/path/manifest/resource/fallback matrix with real-CLI, local-promisor, and narrow in-process seam evidence
+  - Explicit 51-row hostile Git/path/manifest/resource/fallback matrix with real-CLI, local-promisor, and narrow in-process seam evidence
   - Explicit 64-row independent evidence/map tamper matrix with zero publication calls
   - Explicit 26-row immutable-generation/CURRENT failure, interruption, concurrency, and recovery matrix
   - Explicit 26-row no-network/import/Git-command/default-core isolation matrix
-  - Final Phase 1 evidence: 170/170 provider-free Station tests, zero skips, unchanged default core tree and archive
+  - Final Phase 1 evidence: 173/173 provider-free Station tests, zero skips, unchanged default core tree and archive
 
 affects: [phase-01-completion, future-station-host-integration]
 
@@ -62,6 +62,7 @@ code_reviewer_remediation_completed: 2026-09-16T22:30:00Z
 strict_cleanup_remediation_completed: 2026-09-16T21:40:11Z
 security_followup_completed: 2026-09-16T21:50:12Z
 backslash_path_remediation_completed: 2026-09-16T22:05:58Z
+combined_raw_path_remediation_completed: 2026-09-16T22:18:46Z
 
 duration: 16 min
 completed: 2026-09-16
@@ -69,7 +70,7 @@ completed: 2026-09-16
 
 # Phase 1 Plan 8: Adversarial Closure and Isolation Proof Summary
 
-> **Verification status: PASSED — strict backslash-path remediation complete.** Reader and independent gate reject non-POSIX backslash path shapes, and valid unsupported evidence produces exact whole-project fallback without partial topology.
+> **Verification status: PASSED — combined invalid-UTF8/raw-backslash remediation complete.** Reader and independent gate inspect raw backslash bytes before decode failure, preserve both applicable classifications, and force exact whole-project fallback without partial topology.
 
 **Plan 01-08 now provides executable, provider-free evidence for hostile extraction, tamper rejection, atomic publication, integration isolation, and fail-closed local-promisor behavior.**
 
@@ -86,7 +87,7 @@ The final architecture decision replaces the earlier bundle-self-authentication 
 
 Executable coverage includes coherent replacement anchors; regular hard-link lock shape; live, stale, reused PID, EPERM, and EIO owner states; two-publisher exclusion; SIGKILL before/after rename; rename ambiguity; post-commit fsync/cleanup/release failure; interrupted recovery; mandatory file fsync; directory-fsync downgrade; 512/513 pattern boundaries; root aliases; candidate-only matching over a 20,000-file non-manifest inventory; and valid-root traversal/non-UTF-8 candidates.
 
-Final verification passed: 170/170 Station tests with zero skips, 8/8 isolation tests, 53/53 focused reader/gate/adversarial tests, syntax checks for every integration `.mjs`, JSON parsing for every integration schema, scope and diff checks limited to `integrations/vibery-station/` plus `.planning/`, default CLI help/inspect smoke, unchanged default/core surfaces, unchanged `archify.zip` object `f7fdf0f866c0d15385a81503e92e8bbbc4d81582`, and unchanged archive SHA-256 `2657acf353d3fadfde472b2c799eb9a1fa3a3b344129066980b9b1c5935f0883`.
+Final verification passed: 173/173 Station tests with zero skips, 8/8 isolation tests, 56/56 focused reader/gate/adversarial tests, 46/46 focused architecture/atomic/output tests, syntax checks for every integration `.mjs`, JSON parsing for every integration schema, scope and diff checks limited to `integrations/vibery-station/` plus `.planning/`, default CLI help/inspect smoke, unchanged default/core surfaces, unchanged `archify.zip` object `f7fdf0f866c0d15385a81503e92e8bbbc4d81582`, and unchanged archive SHA-256 `2657acf353d3fadfde472b2c799eb9a1fa3a3b344129066980b9b1c5935f0883`.
 
 ### Architecture remediation commits
 
@@ -150,6 +151,19 @@ The final path-shape blocker is closed:
 1. `1e33a04d4bf1239585c712c559e011100f4b0f00` — `test(station): expose backslash manifest omission`
 2. `0dd1e5d740f111c25641baa10afafca3f30526e2` — `fix(station): reject backslash manifest paths`
 
+## Combined Invalid-UTF8/Raw-Backslash Remediation Closure
+
+The exact-head decode-order blocker is closed:
+
+1. Both the immutable reader and independent gate inspect raw path bytes for `0x5c` before the UTF-8-null early return, so `ff5c7061636b6167652e6a736f6e` deterministically retains both `path-encoding-unsupported` and `path-shape-unsupported` facts.
+2. A real-Git fixture combines a valid root manifest, valid workspace manifest, and the invalid-UTF8 raw-backslash manifest. Inventory remains complete, the hostile path remains outside POSIX manifest candidates, and the global shape fact forces exact `station-fallback/path-unsupported` with zero packages or relations.
+3. Producer and independent gate return the same coarse result; omitting the shape fact is rejected, while malformed tree protocol remains a hard failure under the existing direct reader coverage.
+
+### Combined-path RED/GREEN commits
+
+1. `35569d072395e2bd2caac998b1dd02f06d1cc2fa` — `test(station): expose decode-first path bypass`
+2. `17cf8c6ee27e2767e420eec3137955dd7648686f` — `fix(station): classify raw backslashes before decoding`
+
 ## Final Remediation Closure
 
 The reopened review blockers are closed:
@@ -182,7 +196,7 @@ The final six reproducible blockers are closed:
 - **Final remediation:** 2026-09-16T18:42:53Z–19:05:55Z
 - **Remediation shape:** four strict RED/GREEN pairs plus planning closure; production contract/gate/projector/output changes remained integration-owned
 
-## Hostile Extraction Matrix — 50/50
+## Hostile Extraction Matrix — 51/51
 
 All rows execute, and the final matrix assertion reports no omissions:
 
@@ -191,7 +205,7 @@ All rows execute, and the final matrix assertion reports no omissions:
 3. Local object availability: `missing-commit`, `missing-tree`, `missing-blob`, `partial-clone-lazy-fetch-disabled` — each is nonzero, never coarse, and preserves prior authority; the real local promisor row additionally proves disabled lazy fetch does not hydrate a promised blob while its explicit control read does.
 4. Repository identity/root/format: `wrong-origin`, `missing-origin`, `credentialed-origin-redaction`, `non-top-level-root`, `unsupported-object-format` — diagnostics are stable and credentials are absent from output.
 5. Tree protocol: `malformed-tree-protocol`, `incomplete-tree-protocol`, `tree-output-over-budget` — injected only through the real orchestrator's reader seam; publication is never called.
-6. Manifest and path classes: `manifest-symlink`, `manifest-gitlink`, `manifest-binary-nul`, `manifest-invalid-utf8`, `control-character-path`, `selected-control-exact`, `selected-control-wildcard`, `backslash-manifest-out-of-pattern`, `backslash-manifest-wildcard-selected`, `invalid-path-shape`, `case-collision`, `unicode-nfc-collision`.
+6. Manifest and path classes: `manifest-symlink`, `manifest-gitlink`, `manifest-binary-nul`, `manifest-invalid-utf8`, `control-character-path`, `selected-control-exact`, `selected-control-wildcard`, `backslash-manifest-out-of-pattern`, `backslash-manifest-wildcard-selected`, `invalid-utf8-raw-backslash-manifest`, `invalid-path-shape`, `case-collision`, `unicode-nfc-collision`.
 7. Structural fallback: `unsupported-glob`, `missing-root-manifest`, `malformed-manifest`, `oversized-manifest`, `zero-workspace-matches`, `duplicate-package-identity`, `more-than-five-groups`.
 8. Policy boundaries: `manifest-count-512`, `manifest-count-513`, `manifest-bytes-1mib`, `manifest-bytes-1mib-plus-one`, `selected-bytes-8mib`, `selected-bytes-8mib-plus-one`.
 9. Integrity failures: `object-unavailable`, `malformed-size-probe`, `probe-read-disagreement`, `process-output-overflow` — all remain hard failures and retain the complete prior three-file authority.
@@ -274,14 +288,15 @@ The static graph permits Node built-ins, integration-local modules, and exactly 
 
 ## Verification Evidence
 
-- `node --test integrations/vibery-station/test/adversarial-extraction.test.mjs` — PASS, 16/16; zero skips.
+- `node --test integrations/vibery-station/test/adversarial-extraction.test.mjs` — PASS, 17/17; zero skips.
 - `node --test integrations/vibery-station/test/station-output.test.mjs integrations/vibery-station/test/atomic-failure.test.mjs` — PASS, 28/28; zero skips.
 - Focused contracts/identity, reader, gate, projector, CLI, generation, concurrency, control-path, and promisor suites — PASS.
 - `node --test integrations/vibery-station/test/isolation.test.mjs` — PASS, 8/8; zero skips.
-- `node --test integrations/vibery-station/test/*.test.mjs` — PASS, 170/170; zero skips.
-- Focused reader/gate/adversarial command — PASS, 53/53; zero skips.
+- `node --test integrations/vibery-station/test/*.test.mjs` — PASS, 173/173; zero skips.
+- Focused reader/gate/adversarial command — PASS, 56/56; zero skips.
+- Focused architecture/atomic/output command — PASS, 46/46; zero skips.
 - `node --check` for every integration `.mjs` file and JSON parsing for all three schemas — PASS.
-- `git diff --check bf4ed1910848eb7d887121ab2ad970551db71d97..HEAD` and worktree check — PASS.
+- `git diff --check 2d3f44d0e9fd4dd4c57c50cb1ad1111362712855..HEAD` and worktree check — PASS.
 - `git diff --exit-code d673e8300df60a5c8166abe78787fdc78f6b8000 -- archify viewer scripts examples generated archify.zip` — PASS.
 - Default `archify --help` — PASS with only the preexisting command surface and no Station route.
 - Default no-install `inspect architecture` smoke — PASS.
@@ -294,7 +309,7 @@ The static graph permits Node built-ins, integration-local modules, and exactly 
 ## Deviations and Omissions
 
 - **Deviations:** remediation changed only the isolated Station integration and its planning evidence; default Archify behavior and artifacts remain unchanged.
-- **Omitted matrix cases:** none. All 50 hostile extraction, 64 gate tamper, 26 atomic failure, and 26 isolation rows executed; the four matrix closure assertions passed.
+- **Omitted matrix cases:** none. All 51 hostile extraction, 64 gate tamper, 26 atomic failure, and 26 isolation rows executed; the four matrix closure assertions passed.
 - **Skipped tests:** none.
 
 ## Residual Filesystem Limitations
@@ -313,7 +328,7 @@ All eight plan summaries exist and Phase 1 is complete. All 16 requirements, inc
 
 ## Self-Check: PASSED
 
-The authorized branch and workspace stayed in place, this strict remediation continued from exact clean HEAD `30c575e19dfcdc39d68aa76f7941b3bd1a8bf39f` without reset/clean/new workspace/branch, every final gate passed with zero skips, and no acceptance claim relies on an inferred row. Default Archify/core/archive surfaces remain at their approved objects and hashes.
+The authorized branch and workspace stayed in place, this strict remediation continued from exact clean HEAD `2d3f44d0e9fd4dd4c57c50cb1ad1111362712855` without reset/clean/new workspace/branch, every final gate passed with zero skips, and no acceptance claim relies on an inferred row. Default Archify/core/archive surfaces remain at their approved objects and hashes.
 
 ---
 *Phase: 01-deterministic-immutable-commit-extraction*
