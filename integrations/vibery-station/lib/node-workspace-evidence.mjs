@@ -402,7 +402,8 @@ export function buildStationEvidence(reader) {
   if (selectedHasReaderClassification(reader, selectedEntries, COLLISION_CODES)) {
     selectionReasons.push('station-fallback/path-collision');
   }
-  if (manifestInventoryHasReaderClassification(reader, UNSUPPORTED_SELECTED_PATH_CODES)) {
+  if (manifestInventoryHasReaderClassification(reader, UNSUPPORTED_SELECTED_PATH_CODES)
+      || reader.unsupportedPaths.some(({ code }) => code === 'station-extract/path-shape-unsupported')) {
     selectionReasons.push('station-fallback/path-unsupported');
   }
 

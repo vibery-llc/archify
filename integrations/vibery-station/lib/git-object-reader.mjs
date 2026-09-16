@@ -245,7 +245,8 @@ function parseTreeInventory(output) {
     }
     if (CONTROL_CHARACTER_RE.test(entry.path)) classify(entryIndex, 'station-extract/path-control-unsupported');
     const segments = entry.path.split('/');
-    if (entry.path.startsWith('/') || segments.some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git')) {
+    if (entry.path.startsWith('/') || entry.path.includes('\\')
+        || segments.some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git')) {
       classify(entryIndex, 'station-extract/path-shape-unsupported');
     }
   }

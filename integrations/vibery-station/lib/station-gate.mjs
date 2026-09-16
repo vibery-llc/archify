@@ -152,7 +152,8 @@ function unsupportedInventoryFacts(inventory) {
     }
     if (CONTROL.test(entry.path)) add(index, 'station-extract/path-control-unsupported');
     const segments = entry.path.split('/');
-    if (entry.path.startsWith('/') || segments.some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git')) {
+    if (entry.path.startsWith('/') || entry.path.includes('\\')
+        || segments.some((segment) => !segment || segment === '.' || segment === '..' || segment === '.git')) {
       add(index, 'station-extract/path-shape-unsupported');
     }
   }
@@ -544,7 +545,8 @@ function reconstructEvidence(reader) {
   if (reader.unsupportedPaths.some(({ code, entryIndex }) => COLLISION_CODES.has(code) && selectedIndexes.has(entryIndex))) {
     selectionReasons.push('station-fallback/path-collision');
   }
-  if (manifestInventoryHasClassification(reader, UNSUPPORTED_SELECTED_PATH_CODES)) {
+  if (manifestInventoryHasClassification(reader, UNSUPPORTED_SELECTED_PATH_CODES)
+      || reader.unsupportedPaths.some(({ code }) => code === 'station-extract/path-shape-unsupported')) {
     selectionReasons.push('station-fallback/path-unsupported');
   }
   const workspace = {
