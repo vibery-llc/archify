@@ -23,10 +23,11 @@ export const ATOMIC_FAILURE_MATRIX = Object.freeze([
   'generation-file-write', 'generation-file-close', 'generation-file-fsync',
   'generation-directory-rename', 'generation-directory-fsync', 'final-path-recheck',
   'temporary-pointer-write', 'temporary-pointer-fsync', 'pointer-rename', 'bundle-root-fsync',
-  'pointer-restoration', 'recovery-material-handling',
+  'pointer-restoration', 'recovery-material-handling', 'cleanup-recovery-fsync-failure',
+  'publisher-publisher-interleaving', 'post-rename-fsync-newer-authority',
   'interrupt-before-pointer-rename', 'interrupt-after-pointer-rename', 'concurrent-once-resolved-reader',
   'no-prior-pointer-failure', 'malformed-path', 'aliased-path', 'symlinked-path', 'conflicting-path',
-  'rollback-failure-retention', 'prior-generations-retained',
+  'final-path-swap-before-rename', 'rollback-failure-retention', 'prior-generations-retained',
 ]);
 
 const covered = new Set();
@@ -305,6 +306,95 @@ test('temporary pointer write/fsync, pointer rename, and post-rename bundle fsyn
   expectCode('station-output/commit-failed', () => publishStationGeneration(candidate, { operations }));
   assertExactAuthority(state.old, state.bundleRoot, 'bundle-root-fsync');
   cover('bundle-root-fsync');
+});
+
+test('two publishers interleave without an older candidate replacing newer authority', () => {
+  const state = seeded();
+  const candidateA = nextCandidate(state.fixture, state.bundleRoot, 'publisher-a');
+  const candidateB = nextCandidate(state.fixture, state.bundleRoot, 'publisher-b');
+  let publicationB;
+  expectCode('station-output/path-invalid', () => publishStationGeneration(candidateA, {
+    barrier(name) {
+      if (name === 'before-current-rename') publicationB = publishStationGeneration(candidateB);
+    },
+  }));
+  assert.ok(publicationB);
+  const current = snapshotAuthority(state.bundleRoot);
+  assert.equal(current.generation_id, publicationB.generation_id);
+  assert.deepEqual(current, { generation_id: publicationB.generation_id, ...exactGeneration(candidateB) });
+  cover('publisher-publisher-interleaving');
+});
+
+test('post-rename fsync failure preserves a newer publisher instead of restoring stale authority', () => {
+  const state = seeded();
+  const candidateA = nextCandidate(state.fixture, state.bundleRoot, 'failed-publisher');
+  const candidateB = nextCandidate(state.fixture, state.bundleRoot, 'newer-publisher');
+  let publicationB;
+  const operations = createStationOutputOperations({
+    fsyncDirectory(target, phase) {
+      if (target === state.bundleRoot && phase === 'commit-current') {
+        publicationB = publishStationGeneration(candidateB);
+        throw new Error('synthetic failed-publisher fsync');
+      }
+      const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+      try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+    },
+  });
+  expectCode('station-output/commit-failed', () => publishStationGeneration(candidateA, { operations }));
+  assert.ok(publicationB);
+  const current = snapshotAuthority(state.bundleRoot);
+  assert.equal(current.generation_id, publicationB.generation_id);
+  assert.deepEqual(current, { generation_id: publicationB.generation_id, ...exactGeneration(candidateB) });
+  cover('post-rename-fsync-newer-authority');
+});
+
+test('cleanup-recovery fsync failure reports only recovery material that still exists', () => {
+  const state = seeded();
+  const candidate = nextCandidate(state.fixture, state.bundleRoot, 'cleanup-recovery-fsync');
+  const operations = createStationOutputOperations({
+    fsyncDirectory(target, phase) {
+      if (target === state.bundleRoot && phase === 'cleanup-recovery') {
+        throw new Error('synthetic cleanup recovery fsync failure');
+      }
+      const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+      try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+    },
+  });
+  let diagnostic;
+  assert.throws(() => publishStationGeneration(candidate, { operations }), (error) => {
+    diagnostic = error.diagnostic;
+    assert.equal(error.code, 'station-output/commit-rollback-failed');
+    return true;
+  });
+  const declared = [diagnostic.evidence.recovery_file, diagnostic.evidence.failure_marker]
+    .filter(Boolean)
+    .map((name) => path.join(state.bundleRoot, name));
+  assert.ok(declared.length > 0);
+  assert.ok(declared.every((target) => fs.existsSync(target)), JSON.stringify(diagnostic));
+  cover('cleanup-recovery-fsync-failure');
+});
+
+test('a final path swap after the first recheck is detected before CURRENT rename', () => {
+  const state = seeded();
+  const candidate = nextCandidate(state.fixture, state.bundleRoot, 'final-path-swap');
+  let injected = false;
+  expectCode('station-output/path-invalid', () => publishStationGeneration(candidate, {
+    barrier(name) {
+      if (name !== 'after-current-recheck') return;
+      injected = true;
+      const current = path.join(state.bundleRoot, 'CURRENT');
+      const saved = path.join(state.bundleRoot, 'saved-current-final');
+      fs.renameSync(current, saved);
+      fs.symlinkSync(saved, current);
+    },
+  }));
+  assert.equal(injected, true);
+  const current = path.join(state.bundleRoot, 'CURRENT');
+  const saved = path.join(state.bundleRoot, 'saved-current-final');
+  fs.unlinkSync(current);
+  fs.renameSync(saved, current);
+  assertExactAuthority(state.old, state.bundleRoot, 'final-path-swap-before-rename');
+  cover('final-path-swap-before-rename');
 });
 
 test('no-prior-pointer failure leaves no partial generation authoritative', () => {
