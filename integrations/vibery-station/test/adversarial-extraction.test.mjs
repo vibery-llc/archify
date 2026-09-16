@@ -23,7 +23,7 @@ const MiB = 1024 * 1024;
 export const ADVERSARIAL_EXTRACTION_MATRIX = Object.freeze([
   'replacement-commit', 'replacement-tree', 'replacement-blob',
   'branch-revision', 'tag-revision', 'abbreviated-revision', 'blob-revision', 'tree-revision',
-  'missing-commit', 'missing-tree', 'missing-blob',
+  'missing-commit', 'missing-tree', 'missing-blob', 'partial-clone-lazy-fetch-disabled',
   'wrong-origin', 'missing-origin', 'credentialed-origin-redaction', 'non-top-level-root',
   'unsupported-object-format',
   'malformed-tree-protocol', 'incomplete-tree-protocol', 'tree-output-over-budget',
