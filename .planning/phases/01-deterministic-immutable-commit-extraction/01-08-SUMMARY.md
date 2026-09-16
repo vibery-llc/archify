@@ -12,7 +12,7 @@ provides:
   - Explicit 64-row independent evidence/map tamper matrix with zero publication calls
   - Explicit 26-row immutable-generation/CURRENT failure, interruption, concurrency, and recovery matrix
   - Explicit 26-row no-network/import/Git-command/default-core isolation matrix
-  - Final Phase 1 evidence: 164/164 provider-free Station tests, zero skips, unchanged default core tree and archive
+  - Final Phase 1 evidence: 167/167 provider-free Station tests, zero skips, unchanged default core tree and archive
 
 affects: [phase-01-completion, future-station-host-integration]
 
@@ -60,6 +60,7 @@ architecture_remediation_completed: 2026-09-16T22:00:00Z
 code_reviewer_remediation_started: 2026-09-16T22:00:00Z
 code_reviewer_remediation_completed: 2026-09-16T22:30:00Z
 strict_cleanup_remediation_completed: 2026-09-16T21:40:11Z
+security_followup_completed: 2026-09-16T21:50:12Z
 
 duration: 16 min
 completed: 2026-09-16
@@ -67,7 +68,7 @@ completed: 2026-09-16
 
 # Phase 1 Plan 8: Adversarial Closure and Isolation Proof Summary
 
-> **Verification status: PASSED — strict cleanup-ownership remediation complete.** Owner-create collisions preserve foreign bytes and inode, cleanup unlinks only reattested invocation-owned material, and owner-removal durability uncertainty never advertises a missing recovery token.
+> **Verification status: PASSED — final narrow security follow-up complete.** Restarted first-publication retries deterministically fsync the complete parent chain before authority, and retained-owner recovery safely recognizes exact prepared-journal prefixes from interrupted committed-marker writes while rejecting contradictory bytes.
 
 **Plan 01-08 now provides executable, provider-free evidence for hostile extraction, tamper rejection, atomic publication, integration isolation, and fail-closed local-promisor behavior.**
 
@@ -84,7 +85,7 @@ The final architecture decision replaces the earlier bundle-self-authentication 
 
 Executable coverage includes coherent replacement anchors; regular hard-link lock shape; live, stale, reused PID, EPERM, and EIO owner states; two-publisher exclusion; SIGKILL before/after rename; rename ambiguity; post-commit fsync/cleanup/release failure; interrupted recovery; mandatory file fsync; directory-fsync downgrade; 512/513 pattern boundaries; root aliases; candidate-only matching over a 20,000-file non-manifest inventory; and valid-root traversal/non-UTF-8 candidates.
 
-Final verification passed: 164/164 Station tests with zero skips, 8/8 isolation tests, 43/43 focused architecture/atomic/output tests, syntax checks for every integration `.mjs`, JSON parsing for every integration schema, scope and diff checks limited to `integrations/vibery-station/` plus `.planning/`, default CLI help/inspect smoke, unchanged default/core surfaces, unchanged `archify.zip` object `f7fdf0f866c0d15385a81503e92e8bbbc4d81582`, and unchanged archive SHA-256 `2657acf353d3fadfde472b2c799eb9a1fa3a3b344129066980b9b1c5935f0883`.
+Final verification passed: 167/167 Station tests with zero skips, 8/8 isolation tests, 46/46 focused architecture/atomic/output tests, syntax checks for every integration `.mjs`, JSON parsing for every integration schema, scope and diff checks limited to `integrations/vibery-station/` plus `.planning/`, default CLI help/inspect smoke, unchanged default/core surfaces, unchanged `archify.zip` object `f7fdf0f866c0d15385a81503e92e8bbbc4d81582`, and unchanged archive SHA-256 `2657acf353d3fadfde472b2c799eb9a1fa3a3b344129066980b9b1c5935f0883`.
 
 ### Architecture remediation commits
 
@@ -121,6 +122,19 @@ The fresh exact-head review blockers are closed:
 
 1. `bb52986d740db0940c53279557aaca85e90a0cc4` — `test(station): expose owner cleanup authority gaps`
 2. `d8d75f4208d0a196db281779d45ddb375a65a688` — `fix(station): preserve exact cleanup ownership`
+
+## Final Narrow Security Follow-up Closure
+
+The two exact-head Security/Trust blockers are closed:
+
+1. First-publication setup now deterministically fsyncs every physical parent directory from the bundle parent through the filesystem root whenever `CURRENT` is absent. A retry after process exit therefore includes the original nearest existing ancestor even when the failed recursive mkdir left the full bundle path present; any EIO still fails before owner acquisition and leaves no `CURRENT`, while unsupported directory fsync weakens the reported durability claim.
+2. A valid prepared journal plus matching retained owner may classify only a strict byte prefix of its uniquely derived canonical committed marker as publisher-interrupted material. Read-only inspection reports committed recovery when `CURRENT` names the candidate; explicit token recovery reattests owner, journal, marker inode, and exact bytes before discarding the partial marker. Non-prefix, mixed-token, and contradictory markers remain authority-indeterminate and byte-preserved.
+3. Child-process SIGKILL tests cover partial committed-marker write, completed close, and completed file-fsync boundaries; every case explicitly recovers the known committed generation and then publishes a subsequent generation successfully. A separate process-restart test proves the original ancestor appears in the retry's fsync chain before complete durability is reported.
+
+### Final security follow-up RED/GREEN commits
+
+1. `3067617946671801c390c4e43012daff9142b4b9` — `test(station): expose final durability recovery gaps`
+2. `fef02ab0e174e4f9950dd9350b33193b00279f4a` — `fix(station): recover durable publication boundaries`
 
 ## Final Remediation Closure
 
@@ -250,8 +264,8 @@ The static graph permits Node built-ins, integration-local modules, and exactly 
 - `node --test integrations/vibery-station/test/station-output.test.mjs integrations/vibery-station/test/atomic-failure.test.mjs` — PASS, 28/28; zero skips.
 - Focused contracts/identity, reader, gate, projector, CLI, generation, concurrency, control-path, and promisor suites — PASS.
 - `node --test integrations/vibery-station/test/isolation.test.mjs` — PASS, 8/8; zero skips.
-- `node --test integrations/vibery-station/test/*.test.mjs` — PASS, 164/164; zero skips.
-- Final focused architecture/atomic/output command — PASS, 43/43; zero skips.
+- `node --test integrations/vibery-station/test/*.test.mjs` — PASS, 167/167; zero skips.
+- Final focused architecture/atomic/output command — PASS, 46/46; zero skips.
 - `node --check` for every integration `.mjs` file and JSON parsing for all three schemas — PASS.
 - `git diff --check bf4ed1910848eb7d887121ab2ad970551db71d97..HEAD` and worktree check — PASS.
 - `git diff --exit-code d673e8300df60a5c8166abe78787fdc78f6b8000 -- archify viewer scripts examples generated archify.zip` — PASS.
@@ -285,7 +299,7 @@ All eight plan summaries exist and Phase 1 is complete. All 16 requirements, inc
 
 ## Self-Check: PASSED
 
-The authorized branch and workspace stayed in place, strict cleanup remediation continued from exact clean HEAD `1e19bc82410da6bc89c04d1103882056b3e86229` without reset/clean/new workspace/branch, every final gate passed with zero skips, and no acceptance claim relies on an inferred row. Default Archify/core/archive surfaces remain at their approved objects and hashes.
+The authorized branch and workspace stayed in place, this security follow-up continued from exact clean HEAD `f3a83e04e2e45da5004adbdb006dbb523242f096` without reset/clean/new workspace/branch, every final gate passed with zero skips, and no acceptance claim relies on an inferred row. Default Archify/core/archive surfaces remain at their approved objects and hashes.
 
 ---
 *Phase: 01-deterministic-immutable-commit-extraction*

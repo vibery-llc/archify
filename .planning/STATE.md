@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
 status: complete
-stopped_at: Strict cleanup-ownership remediation verified complete at 164/164 tests
-last_updated: "2026-09-16T21:40:11.000Z"
+stopped_at: Final narrow Security/Trust follow-up verified complete at 167/167 tests
+last_updated: "2026-09-16T21:50:12.000Z"
 progress:
   total_phases: 1
   completed_phases: 1
@@ -30,7 +30,7 @@ Phase: 01 (deterministic-immutable-commit-extraction) — COMPLETE
 Plan: 8 of 8 implementation plans complete; final remediation verified
 **Milestone:** v1.0 Part 02 deterministic Station substrate — COMPLETE
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
-**Status:** Complete after strict cleanup-ownership remediation; 164-test cumulative, 43-test focused architecture/atomic/output, static, schema, 8-test isolation, scope, core, default-CLI, and archive gates passed
+**Status:** Complete after final narrow Security/Trust follow-up; 167-test cumulative, 46-test focused architecture/atomic/output, static, schema, 8-test isolation, scope, core, default-CLI, and archive gates passed
 **Plans:** 8/8 complete; 01-08 verification closed
 **Requirement coverage:** 16/16 complete
 **Current focus:** None; Phase 1 is ready for downstream host-integration planning.
@@ -112,6 +112,8 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-08 Code Reviewer remediation]: Fsync the nearest pre-existing parent plus recursively created parent chain before first-publication lock acquisition. — EIO leaves no CURRENT and unsupported directory fsync explicitly weakens the durability claim.
 - [Phase 01-08 strict cleanup remediation]: Treat an exclusive owner-create collision as foreign, and unlink control material only after exact inode-and-byte ownership checks. — A deterministic token collision must preserve the pre-existing owner and report its actual busy or stale state.
 - [Phase 01-08 strict cleanup remediation]: Distinguish retained token-addressable recovery from owner-release durability uncertainty. — Once owner and lock material are observably absent, no recovery token may be advertised; the committed result instead reports unknown directory durability.
+- [Phase 01-08 final Security/Trust follow-up]: On every first-publication attempt without `CURRENT`, fsync the deterministic physical parent chain through the filesystem root. — A process-restart retry cannot mistake directories left by an earlier failed recursive mkdir for durably published directory entries.
+- [Phase 01-08 final Security/Trust follow-up]: Recognize only a strict canonical committed-marker prefix derived from a valid prepared journal and matching retained owner. — Explicit token recovery can safely discard publisher-interrupted marker bytes, while contradictory or malicious bytes remain authority-indeterminate.
 
 ## Performance Metrics
 
@@ -128,10 +130,10 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T22:30:00.000Z
-- **Stopped at:** Strict cleanup-ownership remediation complete; all 164 Station tests, 43 focused tests, and final isolation gates passed
+- **Last session:** 2026-09-16T21:50:12.000Z
+- **Stopped at:** Final narrow Security/Trust follow-up complete; all 167 Station tests, 46 focused tests, and final isolation gates passed
 - **Resume file:** `.planning/phases/01-deterministic-immutable-commit-extraction/01-08-SUMMARY.md`
 
 ## Next Action
 
-Phase 1 strict cleanup-ownership remediation is complete. Begin downstream host integration only under separately approved scope.
+Phase 1 final narrow Security/Trust follow-up is complete. Begin downstream host integration only under separately approved scope.

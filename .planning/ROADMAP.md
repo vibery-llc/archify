@@ -1,6 +1,6 @@
 # Roadmap: Archify Station Map
 
-_Last updated: 2026-09-16 after strict cleanup-ownership remediation and final 164/164 verification — Completed milestone: **v1.0 Part 02 deterministic Station substrate**. Source of truth: `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, and Phase 1 research at `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md`._
+_Last updated: 2026-09-16 after the final narrow Security/Trust follow-up and 167/167 verification — Completed milestone: **v1.0 Part 02 deterministic Station substrate**. Source of truth: `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, and Phase 1 research at `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md`._
 
 ## Milestone
 
