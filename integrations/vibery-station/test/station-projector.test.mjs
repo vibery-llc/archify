@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { canonicalJsonBytes, sha256Hex } from '../lib/canonical-json.mjs';
+import { FALLBACK_REASON_CODES } from '../lib/contracts.mjs';
 import {
   deriveEvidenceId,
   deriveProjectId,
@@ -277,4 +278,121 @@ test('display-name-only package changes never alter room or relation identities'
   assert.deepEqual(beforeMap.rooms.map(({ id }) => id), afterMap.rooms.map(({ id }) => id));
   assert.deepEqual(beforeMap.relations.map(({ id }) => id), afterMap.relations.map(({ id }) => id));
   assert.notEqual(beforeMap.snapshot.evidence_sha256, afterMap.snapshot.evidence_sha256);
+});
+
+function fallbackEvidence(reasonCodes) {
+  const evidence = evidenceValue();
+  evidence.workspace = {
+    kind: 'unsupported',
+    root_manifest_evidence_id: evidence.workspace.root_manifest_evidence_id,
+    patterns: [],
+    package_roots: [],
+  };
+  evidence.packages = [];
+  evidence.analysis.detail_eligible = false;
+  evidence.analysis.represented_manifest_count = 0;
+  evidence.analysis.fallback_reason_codes = [...reasonCodes];
+  return evidence;
+}
+
+function assertCoarseMap(result, evidence, expectedReasons, expectedLabel = 'station-projector') {
+  const evidenceBytes = canonicalJsonBytes(evidence);
+  const evidenceHash = sha256Hex(evidenceBytes);
+  const roomId = deriveRoomId(PROJECT_ID, 'project-root');
+  assert.equal(result.value.snapshot.mode, 'coarse');
+  assert.equal(result.value.snapshot.evidence_sha256, evidenceHash);
+  assert.equal(result.value.snapshot.id, deriveSnapshotId(PROJECT_ID, REVISION, evidenceHash));
+  assert.deepEqual(result.value.project, { id: PROJECT_ID, label: 'station-projector' });
+  assert.deepEqual(result.value.rooms, [{
+    id: roomId,
+    project_id: PROJECT_ID,
+    kind: 'coarse-project',
+    structural_key: 'project-root',
+    label: expectedLabel,
+    package_roots: [],
+    confidence: 'coarse',
+    evidence_ids: [...new Set(evidence.files.map(({ id }) => id))].sort(),
+  }]);
+  assert.deepEqual(result.value.relations, []);
+  assert.deepEqual(result.value.fallback, {
+    used: true,
+    reason_codes: [...expectedReasons].sort(),
+  });
+  assert.deepEqual(result.bytes, canonicalJsonBytes(result.value));
+}
+
+test('collapses every evidence-builder fallback reason to one evidence-bound coarse room', async () => {
+  const builderReasons = FALLBACK_REASON_CODES.filter((reason) => (
+    reason !== 'station-fallback/room-count-out-of-range'
+  ));
+  assert.equal(builderReasons.length, 15);
+  for (const reason of builderReasons) {
+    const evidence = fallbackEvidence([reason]);
+    assertCoarseMap(await project(evidence), evidence, [reason]);
+  }
+
+  const combined = fallbackEvidence([
+    'station-fallback/workspace-manifest-invalid',
+    'station-fallback/path-collision',
+    'station-fallback/workspace-manifest-invalid',
+  ]);
+  combined.analysis.fallback_reason_codes = [
+    'station-fallback/workspace-manifest-invalid',
+    'station-fallback/path-collision',
+  ];
+  assertCoarseMap(await project(combined), combined, [
+    'station-fallback/path-collision',
+    'station-fallback/workspace-manifest-invalid',
+  ]);
+});
+
+test('collapses zero or more-than-five structural groups without retaining partial detail', async () => {
+  const zeroGroups = evidenceValue();
+  zeroGroups.workspace = {
+    kind: 'npm-workspaces',
+    root_manifest_evidence_id: zeroGroups.workspace.root_manifest_evidence_id,
+    patterns: ['packages/*'],
+    package_roots: [],
+  };
+  assertCoarseMap(await project(zeroGroups), zeroGroups, [
+    'station-fallback/room-count-out-of-range',
+  ], '@example/root');
+
+  const sixGroups = evidenceValue({ workspacePackages: workspacePackages(6) });
+  const result = await project(sixGroups);
+  assertCoarseMap(result, sixGroups, [
+    'station-fallback/room-count-out-of-range',
+  ], '@example/root');
+  assert.equal(result.value.rooms[0].evidence_ids.length, 7);
+  assert.ok(result.value.rooms[0].evidence_ids.includes(sixGroups.workspace.root_manifest_evidence_id));
+});
+
+test('rejects malformed, identity-inconsistent, unknown, or byte-tampered evidence as hard diagnostics', async () => {
+  const { projectStationMap } = await loadProjector();
+  const exact = evidenceValue();
+  const tamperedBytes = Buffer.concat([canonicalJsonBytes(exact), Buffer.from('\n')]);
+  await assert.rejects(
+    async () => projectStationMap(exact, tamperedBytes),
+    (error) => error?.diagnostic?.code === 'station-gate/evidence-identity-mismatch',
+  );
+
+  const inconsistent = evidenceValue();
+  inconsistent.repository.url = 'https://github.com/example/different-project';
+  await assert.rejects(
+    async () => projectStationMap(inconsistent, canonicalJsonBytes(inconsistent)),
+    (error) => error?.diagnostic?.code === 'station-gate/evidence-identity-mismatch',
+  );
+
+  const malformed = evidenceValue();
+  malformed.unknown = true;
+  await assert.rejects(
+    async () => projectStationMap(malformed, canonicalJsonBytes(malformed)),
+    (error) => error?.diagnostic?.code === 'station-gate/schema-invalid',
+  );
+
+  const unknownReason = fallbackEvidence(['station-fallback/not-approved']);
+  await assert.rejects(
+    async () => projectStationMap(unknownReason, canonicalJsonBytes(unknownReason)),
+    (error) => error?.diagnostic?.code === 'station-gate/schema-invalid',
+  );
 });
