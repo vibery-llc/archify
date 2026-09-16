@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
 status: complete
-stopped_at: Approved architecture remediation verified complete at 153/153 tests
-last_updated: "2026-09-16T22:00:00.000Z"
+stopped_at: Authoritative Code Reviewer remediation verified complete at 162/162 tests
+last_updated: "2026-09-16T22:30:00.000Z"
 progress:
   total_phases: 1
   completed_phases: 1
@@ -30,7 +30,7 @@ Phase: 01 (deterministic-immutable-commit-extraction) — COMPLETE
 Plan: 8 of 8 implementation plans complete; final remediation verified
 **Milestone:** v1.0 Part 02 deterministic Station substrate — COMPLETE
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
-**Status:** Complete after architecture remediation; 153-test cumulative, static, schema, 8-test isolation, scope, core, default-CLI, and archive gates passed
+**Status:** Complete after authoritative Code Reviewer remediation; 162-test cumulative, static, schema, 8-test isolation, scope, core, default-CLI, and archive gates passed
 **Plans:** 8/8 complete; 01-08 verification closed
 **Requirement coverage:** 16/16 complete
 **Current focus:** None; Phase 1 is ready for downstream host-integration planning.
@@ -107,6 +107,9 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-08 architecture remediation]: Use a fully fsynced unique owner file plus hard link for the fixed publication lock; classify live, stale, reused-PID, and unknown owners without age expiry. — Explicit token recovery is the only stale-owner mutation path.
 - [Phase 01-08 architecture remediation]: Journal the prepared transaction before `CURRENT`, publish forward-only, and return committed-recovery-required after any known post-rename commit problem. — A committed replacement is never reported as a generic failure or rolled back.
 - [Phase 01-08 architecture remediation]: Bound workspace declarations at 512 and match only bounded manifest candidates while including the root manifest in alias collision policy. — Large unrelated inventories cannot amplify workspace selection.
+- [Phase 01-08 Code Reviewer remediation]: Clean unique owner material on pre-authority failure, but retain exact token-addressable state whenever fixed hard-link authority may exist. — Acquisition ambiguity must never strand an owner/lock or collapse into a generic failure without recovery authority.
+- [Phase 01-08 Code Reviewer remediation]: Validate prepared and committed markers together and bind every transaction field set to the observed owner token before inspection or deletion. — Recovery under token A can never delete token B metadata or contradictory markers.
+- [Phase 01-08 Code Reviewer remediation]: Fsync the nearest pre-existing parent plus recursively created parent chain before first-publication lock acquisition. — EIO leaves no CURRENT and unsupported directory fsync explicitly weakens the durability claim.
 
 ## Performance Metrics
 
@@ -123,10 +126,10 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T22:00:00.000Z
-- **Stopped at:** Approved architecture remediation complete; all 153 Station tests and final isolation gates passed
+- **Last session:** 2026-09-16T22:30:00.000Z
+- **Stopped at:** Authoritative Code Reviewer remediation complete; all 162 Station tests and final isolation gates passed
 - **Resume file:** `.planning/phases/01-deterministic-immutable-commit-extraction/01-08-SUMMARY.md`
 
 ## Next Action
 
-Phase 1 architecture remediation is complete. Begin downstream host integration only under separately approved scope.
+Phase 1 authoritative Code Reviewer remediation is complete. Begin downstream host integration only under separately approved scope.
