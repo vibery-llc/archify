@@ -98,7 +98,7 @@ test('old trusted anchor rejects a coherent replacement bundle before artifact a
 });
 
 test('regular owner lock distinguishes live, stale, reused PID, EPERM, and EIO without age expiry', () => {
-  for (const [label, processStartIdentity, expected] of [
+  for (const [label, inspectOwner, expected] of [
     ['live', () => 'boot:100', 'station-output/publication-busy'],
     ['stale', () => { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); }, 'station-output/publication-lock-stale'],
     ['reused', () => 'boot:999', 'station-output/publication-lock-stale'],
@@ -108,7 +108,11 @@ test('regular owner lock distinguishes live, stale, reused PID, EPERM, and EIO w
     const fixture = createGitFixture();
     const bundleRoot = temporaryBundle();
     seedLock(bundleRoot);
-    const operations = createStationOutputOperations({ processStartIdentity });
+    const operations = createStationOutputOperations({
+      processStartIdentity(pid) {
+        return pid === process.pid ? 'publisher:current' : inspectOwner();
+      },
+    });
     expectCode(expected, () => publishStationGeneration(candidate(fixture, bundleRoot), { operations }), label);
   }
 });

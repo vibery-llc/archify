@@ -119,6 +119,7 @@ function coherentlyRewrite(bundleRoot, generationId, mutate) {
   const rewrittenRoot = path.join(bundleRoot, 'generations', rewrittenId);
   fs.renameSync(targets.root, rewrittenRoot);
   fs.writeFileSync(path.join(bundleRoot, 'CURRENT'), `${rewrittenId}\n`);
+  return rewrittenId;
 }
 
 function expectCode(code, operation) {
@@ -153,105 +154,40 @@ test('resolved generations independently reconstruct every map semantic after al
     } });
     const bundleRoot = temporaryBundle();
     const published = publishStationGeneration(makeCandidate(fixture, bundleRoot));
-    coherentlyRewrite(bundleRoot, published.generation_id, mutate);
-    expectCode('station-output/pointer-invalid', () => readStationGeneration(bundleRoot));
+    const rewrittenId = coherentlyRewrite(bundleRoot, published.generation_id, mutate);
+    expectCode('station-output/pointer-invalid', () => readStationGeneration(bundleRoot, { expectedGenerationId: rewrittenId }));
     assert.ok(fs.existsSync(path.join(bundleRoot, 'CURRENT')), name);
   }
 });
 
-test('publication lock excludes a publisher after the final check and throughout rollback', () => {
+test('post-rename failures are forward-only and expose committed recovery without rollback', () => {
   const fixture = createGitFixture();
   const bundleRoot = temporaryBundle();
   const original = publishStationGeneration(makeCandidate(fixture, bundleRoot));
-  const candidateA = nextCandidate(fixture, bundleRoot, 'publisher-a');
-  const candidateB = nextCandidate(fixture, bundleRoot, 'publisher-b');
-  let finalCheckAttempted = false;
-  const committedA = publishStationGeneration(candidateA, {
-    barrier(name) {
-      if (name !== 'after-final-current-check') return;
-      finalCheckAttempted = true;
-      expectCode('station-output/publication-busy', () => publishStationGeneration(candidateB));
-    },
-  });
-  assert.equal(finalCheckAttempted, true);
-  assert.equal(readStationGeneration(bundleRoot).generation_id, committedA.generation_id);
-
-  let rollbackAttempted = false;
-  expectCode('station-output/commit-failed', () => publishStationGeneration(candidateB, {
+  const replacement = nextCandidate(fixture, bundleRoot, 'forward-only');
+  let restorationAttempted = false;
+  const result = publishStationGeneration(replacement, {
     operations: createStationOutputOperations({
       fsyncDirectory(target, phase) {
         if (target === bundleRoot && phase === 'commit-current') {
-          rollbackAttempted = true;
-          expectCode('station-output/publication-busy', () => publishStationGeneration(candidateA));
-          throw new Error('force rollback');
+          throw Object.assign(new Error('commit fsync failure'), { code: 'EIO' });
         }
         const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
         try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
       },
+      rename(source, target, phase) {
+        if (phase === 'restore-current') restorationAttempted = true;
+        fs.renameSync(source, target);
+      },
     }),
-  }));
-  assert.equal(rollbackAttempted, true);
-  assert.equal(readStationGeneration(bundleRoot).generation_id, committedA.generation_id);
-  const committedB = publishStationGeneration(candidateB);
-  assert.notEqual(committedB.generation_id, original.generation_id);
-  assert.equal(readStationGeneration(bundleRoot).generation_id, committedB.generation_id);
-});
-
-test('CURRENT inspection errors after rename retain blocking recovery instead of inferring newer authority', () => {
-  const fixture = createGitFixture();
-  const bundleRoot = temporaryBundle();
-  publishStationGeneration(makeCandidate(fixture, bundleRoot));
-  const candidate = nextCandidate(fixture, bundleRoot, 'inspection-error');
-  let postRenameFailure = false;
-  const operations = createStationOutputOperations({
-    fsyncDirectory(target, phase) {
-      if (target === bundleRoot && phase === 'commit-current') {
-        postRenameFailure = true;
-        throw new Error('commit fsync failure');
-      }
-      const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
-      try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
-    },
-    lstat(target) {
-      if (postRenameFailure && target === path.join(bundleRoot, 'CURRENT')) {
-        throw Object.assign(new Error('injected CURRENT lstat error'), { code: 'EIO' });
-      }
-      return fs.lstatSync(target);
-    },
   });
-  expectCode('station-output/commit-rollback-failed', () => publishStationGeneration(candidate, { operations }));
-  expectCode('station-output/recovery-required', () => readStationGeneration(bundleRoot));
-});
-
-test('recovery recreation failure still leaves a durable blocking failure marker', () => {
-  const fixture = createGitFixture();
-  const bundleRoot = temporaryBundle();
-  publishStationGeneration(makeCandidate(fixture, bundleRoot));
-  const candidate = nextCandidate(fixture, bundleRoot, 'recovery-recreation');
-  let recoveryRemoved = false;
-  const operations = createStationOutputOperations({
-    openExclusive(target) {
-      if (recoveryRemoved && path.basename(target).startsWith('CURRENT.recovery-')) {
-        throw new Error('injected recovery recreation failure');
-      }
-      return fs.openSync(target, 'wx', 0o600);
-    },
-    fsyncDirectory(target, phase) {
-      if (target === bundleRoot && phase === 'commit-current') throw new Error('commit fsync failure');
-      const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
-      try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
-    },
-  });
-  expectCode('station-output/commit-rollback-failed', () => publishStationGeneration(candidate, {
-    operations,
-    barrier(name, { generation_id: generationId }) {
-      if (name !== 'after-current-rename') return;
-      fs.unlinkSync(path.join(bundleRoot, `CURRENT.recovery-${generationId}`));
-      recoveryRemoved = true;
-    },
+  assert.equal(result.state, 'committed-recovery-required');
+  assert.equal(result.committed, true);
+  assert.equal(restorationAttempted, false);
+  assert.notEqual(result.generation_id, original.generation_id);
+  expectCode('station-output/recovery-required', () => readStationGeneration(bundleRoot, {
+    expectedGenerationId: result.generation_id,
   }));
-  assert.ok(fs.readdirSync(bundleRoot).some((name) => name.startsWith('CURRENT.rollback-failed-')));
-  expectCode('station-output/recovery-required', () => readStationGeneration(bundleRoot));
 });
 
 test('real CLI redacts credentials from SCP-like remotes in typed diagnostics', () => {

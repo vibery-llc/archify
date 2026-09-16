@@ -62,6 +62,10 @@ function expectCode(code, operation) {
   });
 }
 
+function anchoredRead(readStationGeneration, bundleRoot, expectedGenerationId, options = {}) {
+  return readStationGeneration(bundleRoot, { ...options, expectedGenerationId });
+}
+
 function artifactPaths(bundleRoot, generationId) {
   const root = path.join(bundleRoot, 'generations', generationId);
   return {
@@ -156,7 +160,7 @@ test('publishes exact immutable generation bytes and resolves CURRENT exactly on
   assert.deepEqual(fs.readFileSync(paths.receipt), candidate.receiptBytes);
 
   let currentReads = 0;
-  const resolved = readStationGeneration(bundleRoot, {
+  const resolved = anchoredRead(readStationGeneration, bundleRoot, published.generation_id, {
     operations: {
       readFile(target) {
         if (target === path.join(bundleRoot, 'CURRENT')) currentReads += 1;
@@ -176,8 +180,8 @@ test('receipt binding covers exact evidence/map hashes and counts but never itse
   const fixture = createGitFixture();
   const bundleRoot = temporaryBundle();
   const candidate = makeCandidate(fixture, bundleRoot);
-  publishStationGeneration(candidate);
-  const resolved = readStationGeneration(bundleRoot);
+  const published = publishStationGeneration(candidate);
+  const resolved = anchoredRead(readStationGeneration, bundleRoot, published.generation_id);
   assert.equal(resolved.receipt.artifacts.evidence.sha256, sha256Hex(resolved.evidenceBytes));
   assert.equal(resolved.receipt.artifacts.evidence.bytes, resolved.evidenceBytes.length);
   assert.equal(resolved.receipt.artifacts.map.sha256, sha256Hex(resolved.mapBytes));
@@ -206,7 +210,7 @@ test('reader authenticates CURRENT against the content-derived generation ID aft
   fs.writeFileSync(paths.map, mapBytes);
   fs.writeFileSync(paths.receipt, canonicalJsonBytes(receipt));
 
-  expectCode('station-output/pointer-invalid', () => readStationGeneration(bundleRoot));
+  expectCode('station-output/pointer-invalid', () => anchoredRead(readStationGeneration, bundleRoot, published.generation_id));
 });
 
 test('reader rejects a coherently rebound tree identity when CURRENT still names the original generation', async () => {
@@ -239,7 +243,7 @@ test('reader rejects a coherently rebound tree identity when CURRENT still names
   fs.writeFileSync(paths.map, mapBytes);
   fs.writeFileSync(paths.receipt, canonicalJsonBytes(receipt));
 
-  expectCode('station-output/pointer-invalid', () => readStationGeneration(bundleRoot));
+  expectCode('station-output/pointer-invalid', () => anchoredRead(readStationGeneration, bundleRoot, published.generation_id));
 });
 
 test('reader cross-checks receipt tree, project, mode, and counts after generation authentication', async () => {
@@ -260,8 +264,8 @@ test('reader cross-checks receipt tree, project, mode, and counts after generati
       receipt: JSON.parse(fs.readFileSync(paths.receipt, 'utf8')),
     };
     mutate(values);
-    rewriteGeneration(bundleRoot, published.generation_id, values, deriveStationGenerationId);
-    expectCode('station-output/pointer-invalid', () => readStationGeneration(bundleRoot));
+    const { rewrittenId } = rewriteGeneration(bundleRoot, published.generation_id, values, deriveStationGenerationId);
+    expectCode('station-output/pointer-invalid', () => anchoredRead(readStationGeneration, bundleRoot, rewrittenId));
     assert.ok(fs.existsSync(path.join(bundleRoot, 'CURRENT')), label);
   }
 });
@@ -290,7 +294,7 @@ test('rejects malformed pointers, non-regular targets, symlink components, and p
     const bundleRoot = temporaryBundle();
     fs.mkdirSync(bundleRoot, { recursive: true });
     fs.writeFileSync(path.join(bundleRoot, 'CURRENT'), pointer);
-    expectCode('station-output/pointer-invalid', () => readStationGeneration(bundleRoot));
+    expectCode('station-output/pointer-invalid', () => anchoredRead(readStationGeneration, bundleRoot, `generation-${'a'.repeat(64)}`));
   }
   {
     const bundleRoot = temporaryBundle();
@@ -321,7 +325,7 @@ test('every caught failure before pointer rename preserves complete prior author
         if (name === event) throw new Error('synthetic interruption');
       },
     }));
-    const current = readStationGeneration(bundleRoot);
+    const current = anchoredRead(readStationGeneration, bundleRoot, old.generation_id);
     assert.equal(current.generation_id, old.generation_id, event);
     assert.deepEqual(current.evidenceBytes, oldCandidate.evidenceBytes, event);
     assert.deepEqual(current.mapBytes, oldCandidate.mapBytes, event);
@@ -343,12 +347,12 @@ test('abrupt child termination immediately before and after pointer rename selec
     });
     assert.equal(child.signal, 'SIGKILL', `${event}: ${child.stderr}`);
     if (expected === 'old') {
-      const current = readStationGeneration(bundleRoot);
+      const current = anchoredRead(readStationGeneration, bundleRoot, old.generation_id);
       assert.equal(current.generation_id, old.generation_id);
       assert.deepEqual(current.receiptBytes, oldCandidate.receiptBytes);
     } else {
-      expectCode('station-output/recovery-required', () => readStationGeneration(bundleRoot));
       const generationId = fs.readFileSync(path.join(bundleRoot, 'CURRENT'), 'utf8').trim();
+      expectCode('station-output/recovery-required', () => anchoredRead(readStationGeneration, bundleRoot, generationId));
       assert.notEqual(generationId, old.generation_id);
       assert.deepEqual(fs.readFileSync(artifactPaths(bundleRoot, generationId).receipt), newer.receiptBytes);
     }
@@ -371,12 +375,13 @@ test('concurrent once-resolved reader remains on old generation while publicatio
   let stderr = '';
   child.stderr.on('data', (chunk) => { stderr += chunk; });
   await waitForFile(ready);
-  const onceResolved = readStationGeneration(bundleRoot);
+  const onceResolved = anchoredRead(readStationGeneration, bundleRoot, old.generation_id);
   assert.equal(onceResolved.generation_id, old.generation_id);
   fs.writeFileSync(release, 'continue');
   const status = await new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
   assert.deepEqual(status, { code: 0, signal: null }, stderr);
-  const current = readStationGeneration(bundleRoot);
+  const currentId = fs.readFileSync(path.join(bundleRoot, 'CURRENT'), 'utf8').trim();
+  const current = anchoredRead(readStationGeneration, bundleRoot, currentId);
   assert.notEqual(current.generation_id, old.generation_id);
   assert.deepEqual(current.receiptBytes, newer.receiptBytes);
   assert.deepEqual(onceResolved.evidenceBytes, oldCandidate.evidenceBytes);
@@ -401,55 +406,47 @@ test('detects final path swaps immediately before publication', async () => {
   }));
 });
 
-test('post-rename bundle fsync failure atomically restores prior CURRENT', async () => {
-  const { createStationOutputOperations, publishStationGeneration, readStationGeneration } = await loadOutput();
-  const fixture = createGitFixture();
-  const bundleRoot = temporaryBundle();
-  const oldCandidate = makeCandidate(fixture, bundleRoot);
-  const old = publishStationGeneration(oldCandidate);
-  const candidate = nextCandidate(fixture, bundleRoot, 'restore-old');
-  const operations = createStationOutputOperations({
-    fsyncDirectory(target, phase) {
-      if (target === bundleRoot && phase === 'commit-current') throw new Error('synthetic parent fsync failure');
-      return 'complete';
-    },
-  });
-  expectCode('station-output/commit-failed', () => publishStationGeneration(candidate, { operations }));
-  const current = readStationGeneration(bundleRoot);
-  assert.equal(current.generation_id, old.generation_id);
-  assert.deepEqual(current.receiptBytes, oldCandidate.receiptBytes);
-});
-
-test('restoration failure returns distinct diagnostic and retains deterministic recovery material', async () => {
-  const { createStationOutputOperations, publishStationGeneration, readStationGeneration } = await loadOutput();
+test('post-rename bundle fsync failure preserves the committed replacement and requests recovery', async () => {
+  const { createStationOutputOperations, publishStationGeneration } = await loadOutput();
   const fixture = createGitFixture();
   const bundleRoot = temporaryBundle();
   const old = publishStationGeneration(makeCandidate(fixture, bundleRoot));
-  const candidate = nextCandidate(fixture, bundleRoot, 'rollback-fails');
+  const candidate = nextCandidate(fixture, bundleRoot, 'forward-only');
   const operations = createStationOutputOperations({
     fsyncDirectory(target, phase) {
-      if (target === bundleRoot && phase === 'commit-current') throw new Error('synthetic parent fsync failure');
-      return 'complete';
+      if (target === bundleRoot && phase === 'commit-current') throw Object.assign(new Error('synthetic parent fsync failure'), { code: 'EIO' });
+      const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+      try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+    },
+  });
+  const result = publishStationGeneration(candidate, { operations });
+  assert.equal(result.state, 'committed-recovery-required');
+  assert.equal(result.committed, true);
+  assert.notEqual(result.generation_id, old.generation_id);
+  assert.equal(fs.readFileSync(path.join(bundleRoot, 'CURRENT'), 'utf8'), `${result.generation_id}\n`);
+});
+
+test('post-commit failure never invokes a restoration rename', async () => {
+  const { createStationOutputOperations, publishStationGeneration } = await loadOutput();
+  const fixture = createGitFixture();
+  const bundleRoot = temporaryBundle();
+  publishStationGeneration(makeCandidate(fixture, bundleRoot));
+  const candidate = nextCandidate(fixture, bundleRoot, 'no-rollback');
+  let restorationAttempted = false;
+  const operations = createStationOutputOperations({
+    fsyncDirectory(target, phase) {
+      if (target === bundleRoot && phase === 'commit-current') throw Object.assign(new Error('synthetic parent fsync failure'), { code: 'EIO' });
+      const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+      try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
     },
     rename(source, target, phase) {
-      if (phase === 'restore-current') throw new Error('synthetic restoration failure');
+      if (phase === 'restore-current') restorationAttempted = true;
       fs.renameSync(source, target);
     },
   });
-  let diagnostic;
-  assert.throws(() => publishStationGeneration(candidate, { operations }), (error) => {
-    diagnostic = error.diagnostic;
-    return error.code === 'station-output/commit-rollback-failed';
-  });
-  assert.equal(diagnostic.evidence.previous_generation_id, old.generation_id);
-  assert.match(diagnostic.evidence.candidate_generation_id, /^generation-[a-f0-9]{64}$/);
-  assert.equal(diagnostic.evidence.recovery_file, `CURRENT.recovery-${diagnostic.evidence.candidate_generation_id}`);
-  assert.ok(fs.existsSync(path.join(bundleRoot, diagnostic.evidence.recovery_file)));
-  assert.ok(fs.existsSync(path.join(bundleRoot, diagnostic.evidence.failure_marker)));
-  assert.ok(fs.existsSync(path.join(bundleRoot, 'generations', old.generation_id)));
-  assert.ok(fs.existsSync(path.join(bundleRoot, 'generations', diagnostic.evidence.candidate_generation_id)));
-  expectCode('station-output/recovery-required', () => readStationGeneration(bundleRoot));
-  expectCode('station-output/recovery-required', () => publishStationGeneration(candidate));
+  const result = publishStationGeneration(candidate, { operations });
+  assert.equal(result.state, 'committed-recovery-required');
+  assert.equal(restorationAttempted, false);
 });
 
 test('documents unsupported directory fsync without claiming portable durability', async () => {
