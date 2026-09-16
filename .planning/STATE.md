@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: Part 02 deterministic Station substrate
-status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-09-16T16:29:25.000Z"
+status: complete
+stopped_at: Completed Phase 1 and 01-08-PLAN.md
+last_updated: "2026-09-16T16:50:02.000Z"
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_plans: 8
+  percent: 100
 ---
 
 # Session State
@@ -26,14 +26,14 @@ See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.
 
 ## Current Position
 
-Phase: 01 (deterministic-immutable-commit-extraction) — EXECUTING
-Plan: 8 of 8
-**Milestone:** v1.0 Part 02 deterministic Station substrate
+Phase: 01 (deterministic-immutable-commit-extraction) — COMPLETE
+Plan: 8 of 8 complete
+**Milestone:** v1.0 Part 02 deterministic Station substrate — COMPLETE
 **Phase:** 1 — Deterministic Immutable-Commit Extraction
-**Status:** Ready to execute
-**Plans:** 7/8 complete; next is `01-08-PLAN.md`
-**Requirement coverage:** 16/16 assigned to plans exactly once; 14 complete; 0 unmapped; 0 duplicate assignments
-**Current focus:** Plan 01-08 — adversarial, failure-injection, and isolation closure
+**Status:** Complete
+**Plans:** 8/8 complete; all summaries present
+**Requirement coverage:** 16/16 assigned and complete; 0 unmapped; 0 duplicate assignments
+**Current focus:** Await Commander direction; deferred host/UI/rendering work requires a separate approved scope.
 
 ## Locked Boundaries
 
@@ -92,6 +92,10 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-06]: Retain deterministic recovery and rollback-failure markers when post-rename restoration fails, and report directory-fsync limitations explicitly. — Recovery never becomes a success claim, while unsupported platform durability is not overclaimed.
 - [Phase 01-07]: Exercise the actual CLI against local clones and resolve each published CURRENT pointer once before exact Buffer comparison. — Determinism claims now cover repository state, transport spelling, environment, and complete published bytes rather than only pure helper output.
 - [Phase 01-07]: Keep the twelve-workspace acceptance data-driven with neutral package names and verify a fully renamed four-group copy. — The required Vibery shape is fixture data produced by generic first-segment grouping, not an implementation branch.
+- [Phase 01-08]: Require named executable closure tables with exact no-omissions assertions for hostile extraction, tamper, publication failure, and isolation evidence. — Phase completion cannot rely on inferred coverage from earlier unit suites.
+- [Phase 01-08]: Run repository-constructible hostility through the real CLI and reserve injected seams for malformed protocol and impossible-to-time filesystem failures. — Acceptance remains end-to-end wherever the local Git/filesystem can construct the case.
+- [Phase 01-08]: Combine a throwing no-network/process preload with static import and Git-command allowlists. — Dynamic success alone cannot prove that dormant provider, browser, renderer, or remote Git routes are absent.
+- [Phase 01-08]: Keep complete ledger evidence for an out-of-range room count while exposing only one coarse room and zero relations. — Full immutable evidence is truthful; only partial topology claims are forbidden.
 
 ## Performance Metrics
 
@@ -104,13 +108,14 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 | Phase 01 P05 | 9 min | 2 tasks | 2 files |
 | Phase 01 P06 | 12 min | 2 tasks | 5 files |
 | Phase 01 P07 | 10 min | 2 tasks | 3 files |
+| Phase 01 P08 | 16 min | 3 tasks | 5 files |
 
 ## Session Continuity
 
-- **Last session:** 2026-09-16T16:29:25.000Z
-- **Stopped at:** Completed 01-07-PLAN.md
+- **Last session:** 2026-09-16T16:50:02.000Z
+- **Stopped at:** Completed Phase 1 and 01-08-PLAN.md
 - **Resume file:** None
 
 ## Next Action
 
-Execute `01-08-PLAN.md` only when authorized; close adversarial object, tamper, fallback, publication-failure, and integration-isolation coverage.
+Phase 1 is complete. Await Commander direction; do not begin deferred rendering, Viewer/UI, host registration, provider, remote-fetch, or broader package-manager work without a new approved Blueprint/phase.

@@ -1,6 +1,6 @@
 # Roadmap: Archify Station Map
 
-_Last updated: 2026-09-16 after Plan 01-07 — Active milestone: **v1.0 Part 02 deterministic Station substrate**. Source of truth: `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, and Phase 1 research at `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md`._
+_Last updated: 2026-09-16 after Plan 01-08 — Completed milestone: **v1.0 Part 02 deterministic Station substrate**. Source of truth: `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md`, and Phase 1 research at `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md`._
 
 ## Milestone
 
@@ -10,7 +10,7 @@ _Last updated: 2026-09-16 after Plan 01-07 — Active milestone: **v1.0 Part 02 
 
 ## Phases
 
-- [ ] **Phase 1: Deterministic Immutable-Commit Extraction** — Extract bounded Git-object evidence, project it into validated stable Station primitives with explicit coarse fallback, and atomically publish the three deterministic artifacts.
+- [x] **Phase 1: Deterministic Immutable-Commit Extraction** — Extract bounded Git-object evidence, project it into validated stable Station primitives with explicit coarse fallback, and atomically publish the three deterministic artifacts.
 
 ## Phase Details
 
@@ -53,7 +53,7 @@ _Last updated: 2026-09-16 after Plan 01-07 — Active milestone: **v1.0 Part 02 
 - [x] **01-05 — Independent fail-closed Station gate** (Wave 5; depends on 01-04; GATE-01, GATE-02)
 - [x] **01-06 — Receipt, CLI orchestration, and atomic bundle publication** (Wave 6; depends on 01-05; OUT-01, OUT-02)
 - [x] **01-07 — Clone-independent determinism and Vibery-shaped acceptance** (Wave 7; depends on 01-06; TEST-01, TEST-03)
-- [ ] **01-08 — Adversarial closure and isolation proof** (Wave 8; depends on 01-07; BOUND-01, TEST-02)
+- [x] **01-08 — Adversarial closure and isolation proof** (Wave 8; depends on 01-07; BOUND-01, TEST-02)
 
 Each v1 requirement is owned by exactly one plan. Plan-level unit tests establish each layer as it is built; Plans 07–08 provide the end-to-end provider-free acceptance and failure-injection closure.
 
@@ -61,7 +61,7 @@ Each v1 requirement is owned by exactly one plan. Plan-level unit tests establis
 
 | Phase | Requirements | Plans Complete | Status |
 |-------|--------------|----------------|--------|
-| 1. Deterministic Immutable-Commit Extraction | 16 | 7/8 | In Progress |
+| 1. Deterministic Immutable-Commit Extraction | 16 | 8/8 | Complete |
 
 ## Deferred Beyond v1
 

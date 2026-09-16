@@ -34,9 +34,9 @@
 
 ### Isolation and Verification
 
-- [ ] **BOUND-01**: The implementation is isolated under `integrations/vibery-station/` and does not change default Archify CLI, core schemas/renderers, Viewer runtime, generated artifacts, or `archify.zip` behavior.
+- [x] **BOUND-01**: The implementation is isolated under `integrations/vibery-station/` and does not change default Archify CLI, core schemas/renderers, Viewer runtime, generated artifacts, or `archify.zip` behavior.
 - [x] **TEST-01**: Provider-free tests prove byte-identical output across different clones, dirty worktrees, and checked-out branches, while README-only revisions change snapshot identity but preserve durable topology IDs.
-- [ ] **TEST-02**: Provider-free adversarial tests cover replacement refs, missing local objects, symlink/gitlink/binary/invalid-UTF-8/path-collision inputs, resource budgets, all fallback reasons, every gate-tamper class, unsafe targets, interrupted commits, and rollback failure.
+- [x] **TEST-02**: Provider-free adversarial tests cover replacement refs, missing local objects, symlink/gitlink/binary/invalid-UTF-8/path-collision inputs, resource budgets, all fallback reasons, every gate-tamper class, unsafe targets, interrupted commits, and rollback failure.
 - [x] **TEST-03**: A Vibery-shaped fixture with twelve workspaces deterministically produces four structural rooms and exactly the expected aggregated cross-room relation directions without product-specific code or an LLM.
 
 ## v2 Requirements
@@ -81,9 +81,9 @@
 | GATE-02 | Phase 1 | Complete |
 | OUT-01 | Phase 1 | Complete |
 | OUT-02 | Phase 1 | Complete |
-| BOUND-01 | Phase 1 | Pending |
+| BOUND-01 | Phase 1 | Complete |
 | TEST-01 | Phase 1 | Complete |
-| TEST-02 | Phase 1 | Pending |
+| TEST-02 | Phase 1 | Complete |
 | TEST-03 | Phase 1 | Complete |
 
 **Coverage:**
@@ -93,4 +93,4 @@
 
 ---
 *Requirements defined: 2026-09-16*
-*Last updated: 2026-09-16 after Plan 01-07 clone-independent and Vibery-shaped acceptance*
+*Last updated: 2026-09-16 after Plan 01-08 adversarial closure and Phase 1 completion*
