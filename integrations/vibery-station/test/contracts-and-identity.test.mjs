@@ -43,6 +43,7 @@ function validLimits() {
   return {
     max_tree_bytes: 16 * 1024 * 1024,
     max_manifest_count: 512,
+    max_workspace_patterns: 512,
     max_manifest_bytes: 1024 * 1024,
     max_selected_manifest_bytes: 8 * 1024 * 1024,
   };

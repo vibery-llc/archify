@@ -14,6 +14,7 @@ export const STATION_CONTRACT_VERSION = 1;
 export const STATION_LIMITS = Object.freeze({
   max_tree_bytes: 16 * 1024 * 1024,
   max_manifest_count: 512,
+  max_workspace_patterns: 512,
   max_manifest_bytes: 1024 * 1024,
   max_selected_manifest_bytes: 8 * 1024 * 1024,
 });
@@ -49,7 +50,7 @@ export const CONTRACT_FIELDS = Object.freeze({
   evidence: Object.freeze({
     '/': Object.freeze(['schema', 'extractor', 'repository', 'files', 'workspace', 'packages', 'analysis']),
     '/extractor': Object.freeze(['profile', 'contract_version', 'limits']),
-    '/extractor/limits': Object.freeze(['max_tree_bytes', 'max_manifest_count', 'max_manifest_bytes', 'max_selected_manifest_bytes']),
+    '/extractor/limits': Object.freeze(['max_tree_bytes', 'max_manifest_count', 'max_workspace_patterns', 'max_manifest_bytes', 'max_selected_manifest_bytes']),
     '/repository': Object.freeze(['id', 'url', 'revision', 'tree_oid', 'object_format']),
     '/files/items': Object.freeze(['id', 'kind', 'path', 'git_oid', 'sha256', 'bytes']),
     '/workspace': Object.freeze(['kind', 'root_manifest_evidence_id', 'patterns', 'package_roots']),
@@ -69,7 +70,7 @@ export const CONTRACT_FIELDS = Object.freeze({
     '/': Object.freeze(['schema', 'ok', 'command', 'repository', 'extractor', 'artifacts', 'result', 'diagnostics']),
     '/repository': Object.freeze(['url', 'revision', 'tree_oid', 'object_format']),
     '/extractor': Object.freeze(['profile', 'contract_version', 'limits']),
-    '/extractor/limits': Object.freeze(['max_tree_bytes', 'max_manifest_count', 'max_manifest_bytes', 'max_selected_manifest_bytes']),
+    '/extractor/limits': Object.freeze(['max_tree_bytes', 'max_manifest_count', 'max_workspace_patterns', 'max_manifest_bytes', 'max_selected_manifest_bytes']),
     '/artifacts': Object.freeze(['evidence', 'map']),
     '/artifacts/evidence': Object.freeze(['file', 'sha256', 'bytes']),
     '/artifacts/map': Object.freeze(['file', 'sha256', 'bytes']),

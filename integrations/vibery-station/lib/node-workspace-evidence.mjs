@@ -179,6 +179,9 @@ function workspacePatterns(value) {
   if (patterns.length === 0 || patterns.some((pattern) => typeof pattern !== 'string')) {
     return { reason: 'station-fallback/workspace-shape-unsupported' };
   }
+  if (patterns.length > STATION_LIMITS.max_workspace_patterns) {
+    return { reason: 'station-fallback/workspace-pattern-unsupported' };
+  }
   return { kind: 'npm-workspaces', patterns };
 }
 
@@ -203,9 +206,13 @@ function entryAtPath(reader, path) {
   return reader.inventory.find((entry) => entry.path === path);
 }
 
+function manifestEntryAtPath(reader, target) {
+  return reader.manifestCandidates.find((entry) => entry.path === target);
+}
+
 function wildcardEntries(reader, parsed) {
   const prefix = parsed.prefix ? `${parsed.prefix}/` : '';
-  return reader.inventory.filter((entry) => {
+  return reader.manifestCandidates.filter((entry) => {
     if (typeof entry.path !== 'string' || !entry.path.startsWith(prefix) || !entry.path.endsWith('/package.json')) return false;
     const root = entry.path.slice(0, -'/package.json'.length);
     const remainder = root.slice(prefix.length);
@@ -253,7 +260,7 @@ function selectWorkspaceEntries(reader, patterns) {
   for (const parsed of parsedPatterns) {
     const entries = parsed.wildcard
       ? wildcardEntries(reader, parsed)
-      : [entryAtPath(reader, `${parsed.pattern}/package.json`)].filter(Boolean);
+      : [manifestEntryAtPath(reader, `${parsed.pattern}/package.json`)].filter(Boolean);
     if (entries.length === 0) {
       reasons.push(parsed.wildcard
         ? 'station-fallback/workspace-match-empty'
@@ -391,6 +398,9 @@ export function buildStationEvidence(reader) {
     roots = selection.roots;
     provenance = selection.provenance;
     selectionReasons = selection.reasons;
+  }
+  if (selectedHasReaderClassification(reader, selectedEntries, COLLISION_CODES)) {
+    selectionReasons.push('station-fallback/path-collision');
   }
   if (manifestInventoryHasReaderClassification(reader, UNSUPPORTED_SELECTED_PATH_CODES)) {
     selectionReasons.push('station-fallback/path-unsupported');

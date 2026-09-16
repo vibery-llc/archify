@@ -119,7 +119,7 @@ function resolveTopLevel(repoRoot) {
 function redactStationRemote(value) {
   return String(value || '')
     .replace(/^((?:https?|ssh):\/\/)[^/]*@/i, '$1REDACTED@')
-    .replace(/^[^/@:]+:[^@/]+@(?=[^/:]+:)/, 'REDACTED@')
+    .replace(/^[^/@]+@(?=[^/:]+:)/, 'REDACTED@')
     .replace(/[?#].*$/s, '?REDACTED');
 }
 

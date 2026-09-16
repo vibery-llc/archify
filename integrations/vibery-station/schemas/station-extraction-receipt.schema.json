@@ -30,10 +30,11 @@
         "limits": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["max_tree_bytes", "max_manifest_count", "max_manifest_bytes", "max_selected_manifest_bytes"],
+          "required": ["max_tree_bytes", "max_manifest_count", "max_workspace_patterns", "max_manifest_bytes", "max_selected_manifest_bytes"],
           "properties": {
             "max_tree_bytes": { "const": 16777216 },
             "max_manifest_count": { "const": 512 },
+            "max_workspace_patterns": { "const": 512 },
             "max_manifest_bytes": { "const": 1048576 },
             "max_selected_manifest_bytes": { "const": 8388608 }
           }

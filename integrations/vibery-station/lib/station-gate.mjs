@@ -288,6 +288,10 @@ function entryAt(reader, path) {
   return reader.inventory.find((entry) => entry.path === path);
 }
 
+function manifestEntryAt(reader, path) {
+  return reader.manifestCandidates.find((entry) => entry.path === path);
+}
+
 function regular(entry) {
   return entry?.type === 'blob' && REGULAR_MODES.has(entry.mode);
 }
@@ -367,6 +371,9 @@ function workspaceDeclaration(value) {
   if (patterns.length === 0 || patterns.some((pattern) => typeof pattern !== 'string')) {
     return { reason: 'station-fallback/workspace-shape-unsupported' };
   }
+  if (patterns.length > STATION_LIMITS.max_workspace_patterns) {
+    return { reason: 'station-fallback/workspace-pattern-unsupported' };
+  }
   return { kind: 'npm-workspaces', patterns };
 }
 
@@ -409,13 +416,13 @@ function selectEntries(reader, patterns) {
   for (const pattern of parsed) {
     const prefix = pattern.prefix ? `${pattern.prefix}/` : '';
     const entries = pattern.wildcard
-      ? reader.inventory.filter((entry) => {
+      ? reader.manifestCandidates.filter((entry) => {
         if (typeof entry.path !== 'string' || !entry.path.startsWith(prefix) || !entry.path.endsWith('/package.json')) return false;
         const root = entry.path.slice(0, -'/package.json'.length);
         const remainder = root.slice(prefix.length);
         return remainder.length > 0 && !remainder.includes('/');
       })
-      : [entryAt(reader, `${pattern.pattern}/package.json`)].filter(Boolean);
+      : [manifestEntryAt(reader, `${pattern.pattern}/package.json`)].filter(Boolean);
     if (entries.length === 0) reasons.push(pattern.wildcard
       ? 'station-fallback/workspace-match-empty'
       : 'station-fallback/workspace-manifest-missing');
@@ -532,6 +539,10 @@ function reconstructEvidence(reader) {
     roots = selection.roots;
     provenance = selection.provenance;
     selectionReasons = selection.reasons;
+  }
+  const selectedIndexes = new Set(selected.map((entry) => reader.inventory.indexOf(entry)));
+  if (reader.unsupportedPaths.some(({ code, entryIndex }) => COLLISION_CODES.has(code) && selectedIndexes.has(entryIndex))) {
+    selectionReasons.push('station-fallback/path-collision');
   }
   if (manifestInventoryHasClassification(reader, UNSUPPORTED_SELECTED_PATH_CODES)) {
     selectionReasons.push('station-fallback/path-unsupported');
