@@ -25,6 +25,8 @@ export const ATOMIC_FAILURE_MATRIX = Object.freeze([
   'rename-committed-ambiguity', 'rename-authority-indeterminate', 'post-commit-cleanup',
   'post-commit-lock-release', 'interrupt-before-pointer-rename', 'interrupt-after-pointer-rename',
   'recovery-interruption', 'directory-fsync-downgrade', 'prior-generations-retained',
+  'first-publication-crash', 'first-publication-parent-fsync-failure',
+  'first-publication-parent-fsync-unsupported',
 ]);
 const covered = new Set();
 function cover(...rows) { rows.forEach((row) => { assert.ok(ATOMIC_FAILURE_MATRIX.includes(row)); covered.add(row); }); }
@@ -230,6 +232,78 @@ test('explicit recovery survives interruption after token reattestation and is r
   assert.equal(recovered.state, 'recovered');
   assert.equal(read(bundleRoot, inspected.generation_id).generation_id, inspected.generation_id);
   cover('recovery-interruption');
+});
+
+test('first publication crash before parent durability leaves no CURRENT and is retryable', () => {
+  assert.notEqual(process.platform, 'win32');
+  const fixture = createGitFixture();
+  const bundleRoot = temporaryBundle();
+  const child = spawnSync(process.execPath, [
+    '--input-type=module', '-e', childProgram('after-bundle-root-created'),
+    fixture.root, fixture.repositoryUrl, fixture.revision, bundleRoot, 'KILL', 'unused',
+  ], { encoding: 'utf8', shell: false });
+  assert.equal(child.signal, 'SIGKILL', child.stderr);
+  assert.equal(fs.existsSync(path.join(bundleRoot, 'CURRENT')), false);
+  let parentSyncs = 0;
+  const result = publishStationGeneration(candidate(fixture, bundleRoot), {
+    operations: createStationOutputOperations({
+      fsyncDirectory(target, phase) {
+        if (phase === 'publish-bundle-root') {
+          parentSyncs += 1;
+          assert.equal(target, path.dirname(bundleRoot));
+        }
+        const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+        try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+      },
+    }),
+  });
+  assert.equal(result.state, 'committed');
+  assert.equal(parentSyncs, 1);
+  cover('first-publication-crash');
+});
+
+test('first publication parent fsync EIO fails before authority and remains retryable', () => {
+  const fixture = createGitFixture();
+  const existingParent = fs.mkdtempSync(path.join(os.tmpdir(), 'station-first-parent-'));
+  const bundleRoot = path.join(existingParent, 'nested', 'bundle');
+  const publication = candidate(fixture, bundleRoot);
+  expectCode('station-output/commit-failed', () => publishStationGeneration(publication, {
+    operations: createStationOutputOperations({
+      fsyncDirectory(target, phase) {
+        if (phase === 'publish-bundle-root') {
+          assert.equal(target, existingParent);
+          throw Object.assign(new Error('parent fsync failed'), { code: 'EIO' });
+        }
+        const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+        try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+      },
+    }),
+  }));
+  assert.equal(fs.existsSync(path.join(bundleRoot, 'CURRENT')), false);
+  assert.equal(publishStationGeneration(publication).state, 'committed');
+  cover('first-publication-parent-fsync-failure');
+});
+
+test('unsupported first publication parent fsync explicitly downgrades durability wording', () => {
+  const fixture = createGitFixture();
+  const existingParent = fs.mkdtempSync(path.join(os.tmpdir(), 'station-first-unsupported-'));
+  const bundleRoot = path.join(existingParent, 'nested', 'bundle');
+  const result = publishStationGeneration(candidate(fixture, bundleRoot), {
+    operations: createStationOutputOperations({
+      fsyncDirectory(target, phase) {
+        if (phase === 'publish-bundle-root') {
+          assert.equal(target, existingParent);
+          throw Object.assign(new Error('parent fsync unsupported'), { code: 'EINVAL' });
+        }
+        const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+        try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+      },
+    }),
+  });
+  assert.equal(result.state, 'committed');
+  assert.equal(result.directory_fsync, 'unsupported-on-platform');
+  assert.equal(result.durability_claim, 'atomic-rename-without-portable-directory-fsync-guarantee');
+  cover('first-publication-parent-fsync-unsupported');
 });
 
 test('unsupported directory fsync downgrades claims and prior immutable generations remain', () => {

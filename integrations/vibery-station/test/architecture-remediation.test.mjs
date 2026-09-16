@@ -54,6 +54,14 @@ function expectCode(code, operation) {
   });
 }
 
+function captureError(code, operation) {
+  let caught;
+  try { operation(); } catch (error) { caught = error; }
+  assert.ok(caught, `expected ${code}`);
+  assert.equal(caught.code, code, JSON.stringify(caught.diagnostic));
+  return caught;
+}
+
 function read(bundleRoot, generationId, operations) {
   return readStationGeneration(bundleRoot, { expectedGenerationId: generationId, ...(operations ? { operations } : {}) });
 }
@@ -72,6 +80,22 @@ function seedLock(bundleRoot, owner = {}) {
   const bytes = ownerBytes(owner);
   fs.writeFileSync(path.join(bundleRoot, '.station-publication.lock'), bytes);
   return JSON.parse(bytes);
+}
+
+function transactionBytes(kind, token, previousGenerationId, candidateGenerationId) {
+  return canonicalJsonBytes({
+    schema: kind === 'journal' ? 'station-publication-transaction/v1' : 'station-publication-committed/v1',
+    token,
+    previous_generation_id: previousGenerationId,
+    candidate_generation_id: candidateGenerationId,
+  });
+}
+
+function publicationControlSnapshot(bundleRoot) {
+  const names = fs.readdirSync(bundleRoot)
+    .filter((name) => name === 'CURRENT' || name.startsWith('.station-publication.'))
+    .sort();
+  return Object.fromEntries(names.map((name) => [name, fs.readFileSync(path.join(bundleRoot, name))]));
 }
 
 test('reader requires and validates a trusted external generation anchor before any filesystem read', () => {
@@ -114,6 +138,81 @@ test('regular owner lock distinguishes live, stale, reused PID, EPERM, and EIO w
       },
     });
     expectCode(expected, () => publishStationGeneration(candidate(fixture, bundleRoot), { operations }), label);
+  }
+});
+
+test('owner write, fsync, and close failures clean pre-authority material and remain retryable', () => {
+  for (const [phase, overrides] of [
+    ['write', { write() { throw Object.assign(new Error('owner write failed'), { code: 'EIO' }); } }],
+    ['fsync', { fsyncFile() { throw Object.assign(new Error('owner fsync failed'), { code: 'EIO' }); } }],
+    ['close', {
+      close(descriptor) {
+        fs.closeSync(descriptor);
+        throw Object.assign(new Error('owner close failed'), { code: 'EIO' });
+      },
+    }],
+  ]) {
+    const fixture = createGitFixture();
+    const bundleRoot = temporaryBundle();
+    const publication = candidate(fixture, bundleRoot);
+    expectCode('station-output/commit-failed', () => publishStationGeneration(publication, {
+      operations: createStationOutputOperations(overrides),
+    }));
+    assert.deepEqual(inspectStationPublication(bundleRoot), { state: 'idle' }, phase);
+    assert.equal(fs.readdirSync(bundleRoot).some((name) => name.startsWith('.station-publication.')), false, phase);
+    assert.equal(publishStationGeneration(publication).state, 'committed', phase);
+  }
+});
+
+test('hard-link failure before acquisition cleans owner material and remains retryable', () => {
+  const fixture = createGitFixture();
+  const bundleRoot = temporaryBundle();
+  const publication = candidate(fixture, bundleRoot);
+  expectCode('station-output/commit-failed', () => publishStationGeneration(publication, {
+    operations: createStationOutputOperations({
+      link() { throw Object.assign(new Error('link failed'), { code: 'EIO' }); },
+    }),
+  }));
+  assert.deepEqual(inspectStationPublication(bundleRoot), { state: 'idle' });
+  assert.equal(publishStationGeneration(publication).state, 'committed');
+});
+
+test('ambiguous hard-link and acquisition-directory fsync failures retain token recovery authority', () => {
+  for (const phase of ['hard-link-acknowledgement', 'acquisition-directory-fsync']) {
+    const fixture = createGitFixture();
+    const bundleRoot = temporaryBundle();
+    const publication = candidate(fixture, bundleRoot);
+    let stale = false;
+    const operations = createStationOutputOperations({
+      processStartIdentity() {
+        if (stale) throw Object.assign(new Error('publisher gone'), { code: 'ESRCH' });
+        return 'test-process:1';
+      },
+      ...(phase === 'hard-link-acknowledgement' ? {
+        link(source, target) {
+          fs.linkSync(source, target);
+          throw Object.assign(new Error('link acknowledgement lost'), { code: 'EIO' });
+        },
+      } : {
+        fsyncDirectory(target, syncPhase) {
+          if (syncPhase === 'acquire-publication-lock') {
+            throw Object.assign(new Error('lock directory fsync failed'), { code: 'EIO' });
+          }
+          const descriptor = fs.openSync(target, fs.constants.O_RDONLY);
+          try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+        },
+      }),
+    });
+    const error = captureError('station-output/recovery-required', () => publishStationGeneration(publication, { operations }));
+    const token = error.diagnostic.evidence.recovery_token;
+    assert.match(token, /^[a-f0-9]{64}$/, phase);
+    stale = true;
+    assert.deepEqual(inspectStationPublication(bundleRoot, { operations }), {
+      state: 'stale-lock', recovery_token: token,
+    }, phase);
+    assert.equal(recoverStationPublication(bundleRoot, { recoveryToken: token, operations }).state, 'recovered', phase);
+    assert.deepEqual(inspectStationPublication(bundleRoot), { state: 'idle' }, phase);
+    assert.equal(publishStationGeneration(publication).state, 'committed', phase);
   }
 });
 
@@ -229,6 +328,78 @@ test('inspection is read-only and explicit stale-owner recovery requires token r
   const recovered = recoverStationPublication(bundleRoot, { recoveryToken: owner.token, operations });
   assert.equal(recovered.state, 'recovered');
   assert.equal(read(bundleRoot, published.generation_id).generation_id, published.generation_id);
+});
+
+test('stale lock rejects journal and committed metadata owned by a different token without changing bytes', () => {
+  for (const kind of ['journal', 'committed']) {
+    const fixture = createGitFixture();
+    const bundleRoot = temporaryBundle();
+    const published = publishStationGeneration(candidate(fixture, bundleRoot));
+    const owner = seedLock(bundleRoot, { token: 'a'.repeat(64), pid: 616161, processStartIdentity: 'boot:300' });
+    const marker = kind === 'journal' ? '.station-publication.transaction' : '.station-publication.committed';
+    fs.writeFileSync(path.join(bundleRoot, marker), transactionBytes(
+      kind, 'b'.repeat(64), published.generation_id, `generation-${'c'.repeat(64)}`,
+    ));
+    const operations = createStationOutputOperations({
+      processStartIdentity() { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); },
+    });
+    const before = publicationControlSnapshot(bundleRoot);
+    assert.deepEqual(inspectStationPublication(bundleRoot, { operations }), {
+      state: 'authority-indeterminate', recovery_token: owner.token,
+    }, kind);
+    expectCode('station-output/authority-indeterminate', () => recoverStationPublication(bundleRoot, {
+      recoveryToken: owner.token, operations,
+    }));
+    assert.deepEqual(publicationControlSnapshot(bundleRoot), before, kind);
+  }
+});
+
+test('contradictory prepared and committed markers are indeterminate and preserved byte-for-byte', () => {
+  const fixture = createGitFixture();
+  const bundleRoot = temporaryBundle();
+  const published = publishStationGeneration(candidate(fixture, bundleRoot));
+  const owner = seedLock(bundleRoot, { token: 'd'.repeat(64), pid: 717171, processStartIdentity: 'boot:400' });
+  fs.writeFileSync(path.join(bundleRoot, '.station-publication.transaction'), transactionBytes(
+    'journal', owner.token, published.generation_id, `generation-${'e'.repeat(64)}`,
+  ));
+  fs.writeFileSync(path.join(bundleRoot, '.station-publication.committed'), transactionBytes(
+    'committed', owner.token, published.generation_id, `generation-${'f'.repeat(64)}`,
+  ));
+  const operations = createStationOutputOperations({
+    processStartIdentity() { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); },
+  });
+  const before = publicationControlSnapshot(bundleRoot);
+  assert.deepEqual(inspectStationPublication(bundleRoot, { operations }), {
+    state: 'authority-indeterminate', recovery_token: owner.token,
+  });
+  expectCode('station-output/authority-indeterminate', () => recoverStationPublication(bundleRoot, {
+    recoveryToken: owner.token, operations,
+  }));
+  assert.deepEqual(publicationControlSnapshot(bundleRoot), before);
+});
+
+test('matching prepared and committed markers remain explicitly recoverable', () => {
+  const fixture = createGitFixture();
+  const bundleRoot = temporaryBundle();
+  const published = publishStationGeneration(candidate(fixture, bundleRoot));
+  const owner = seedLock(bundleRoot, { token: '1'.repeat(64), pid: 818181, processStartIdentity: 'boot:500' });
+  const nextGeneration = `generation-${'2'.repeat(64)}`;
+  fs.writeFileSync(path.join(bundleRoot, '.station-publication.transaction'), transactionBytes(
+    'journal', owner.token, published.generation_id, nextGeneration,
+  ));
+  fs.writeFileSync(path.join(bundleRoot, '.station-publication.committed'), transactionBytes(
+    'committed', owner.token, published.generation_id, nextGeneration,
+  ));
+  const operations = createStationOutputOperations({
+    processStartIdentity() { throw Object.assign(new Error('gone'), { code: 'ESRCH' }); },
+  });
+  assert.deepEqual(inspectStationPublication(bundleRoot, { operations }), {
+    state: 'stale-lock', recovery_token: owner.token,
+  });
+  assert.deepEqual(recoverStationPublication(bundleRoot, { recoveryToken: owner.token, operations }), {
+    state: 'recovered', committed: false, generation_id: published.generation_id,
+    directory_fsync: 'complete',
+  });
 });
 
 test('regular-file fsync is mandatory while unsupported directory fsync only downgrades durability', () => {
