@@ -1,0 +1,10 @@
+{
+  "name": "@tt-a1i/vibery-station-map",
+  "version": "0.0.0-private",
+  "private": true,
+  "type": "module",
+  "description": "Isolated deterministic Station map extraction profile for Archify.",
+  "engines": {
+    "node": ">=18"
+  }
+}

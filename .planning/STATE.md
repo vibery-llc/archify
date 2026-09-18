@@ -1,0 +1,141 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: Part 02 deterministic Station substrate
+status: complete
+stopped_at: Combined invalid-UTF8/raw-backslash remediation verified complete at 173/173 tests
+last_updated: "2026-09-16T22:18:46.000Z"
+progress:
+  total_phases: 1
+  completed_phases: 1
+  total_plans: 8
+  completed_plans: 8
+  percent: 100
+---
+
+# Session State
+
+## Project Reference
+
+See: `.planning/PROJECT.md` — milestone boundary and core value
+See: `.planning/REQUIREMENTS.md` — 16 v1 requirements, all mapped exactly once to Phase 1
+See: `.planning/ROADMAP.md` — one-phase v1.0 roadmap
+See: `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md` — authoritative Phase 1 research
+
+**Core value:** Given the same repository identity and exact commit, Station receives byte-identical, independently verifiable topology artifacts—or no replacement at all.
+
+## Current Position
+
+Phase: 01 (deterministic-immutable-commit-extraction) — COMPLETE
+Plan: 8 of 8 implementation plans complete; final remediation verified
+**Milestone:** v1.0 Part 02 deterministic Station substrate — COMPLETE
+**Phase:** 1 — Deterministic Immutable-Commit Extraction
+**Status:** Complete after combined invalid-UTF8/raw-backslash remediation; 173-test cumulative, 56-test focused reader/gate/adversarial, 46-test architecture/atomic/output, static, schema, 8-test isolation, scope, core, default-CLI, and archive gates passed
+**Plans:** 8/8 complete; 01-08 verification closed
+**Requirement coverage:** 16/16 complete
+**Current focus:** None; Phase 1 is ready for downstream host-integration planning.
+
+## Locked Boundaries
+
+- Brownfield and infrastructure-only.
+- Integration-owned under `integrations/vibery-station/`.
+- One exact local 40-character commit; Git tree/blob objects only.
+- No network, remote fetch, lazy hydration, provider dependency, or installation.
+- Deterministic `station-evidence/v1`, `station-map/v1`, and `station-extraction-receipt/v1` bytes.
+- Complete one-to-five-room structural projection or one explicit coarse room.
+- Hard integrity failures publish nothing; coarse fallback is never an integrity escape hatch.
+- Three-artifact publication uses immutable generations, an owner-aware regular hard-link lock, a forward-only prepared journal, and one atomically replaced regular-file `CURRENT` pointer; readers require an external trusted generation anchor and prior generations remain intact.
+- No rendering, Viewer/UI, Unity, host registration, LLM synthesis, broad package-manager analysis, or default Archify behavior changes.
+
+## Planning Notes
+
+- Preserve the existing phase directory name: `.planning/phases/01-deterministic-immutable-commit-extraction/`.
+- Use the Phase 1 research as the implementation-planning baseline; resolve plan boundaries inside the single phase rather than adding roadmap phases.
+- Keep acceptance evidence provider-free and mechanically checkable through exact-byte, schema, identity, tamper, hostile-input, and failure-injection assertions.
+- `.planning/REQUIREMENTS.md` traceability already maps every v1 requirement exactly once to Phase 1, so no requirements edit was needed during roadmap creation.
+
+## Execution Order
+
+1. `01-01-PLAN.md` — contracts, canonical bytes, identities
+2. `01-02-PLAN.md` — immutable Git object reader
+3. `01-03-PLAN.md` — evidence ledger
+4. `01-04-PLAN.md` — structural/coarse projection
+5. `01-05-PLAN.md` — independent gate
+6. `01-06-PLAN.md` — receipt, CLI, atomic publication
+7. `01-07-PLAN.md` — determinism and Vibery-shaped acceptance
+8. `01-08-PLAN.md` — adversarial, failure-injection, and isolation closure
+
+## Plan Checker Result
+
+The initial independent check found four blockers, all corrected in planning artifacts: the gate now reconstructs the complete evidence ledger and map; manifest policy sizes use exact OID probes while object inconsistency remains hard failure; publication uses immutable generations plus one atomic pointer; and equivalent supported-forge remote spellings normalize to one Station canonical URL.
+
+Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. It confirmed all four corrections, the serial eight-wave dependency chain, exact 16/16 requirement ownership, integration-only scope, baseline path validity, and unchanged `archify.zip` hash. Non-blocking execution cautions are to test annotated-tag object typing directly, keep oversized-manifest fallback accounting explicit, and document platform-specific directory-fsync limits.
+
+## Accumulated Decisions
+
+- **01-01:** Keep all Station schemas, runtime validators, diagnostics, canonicalization, and identities integration-owned with zero runtime dependencies.
+- **01-01:** Artifact repository URLs use identity-derived canonical forms: standard GitHub/Gitee identities normalize to HTTPS, while arbitrary-host HTTPS/SSH/SCP identities retain transport, port, and path-kind semantics; credentials and noncanonical spellings are rejected.
+- **01-01:** Durable topology IDs use versioned NUL-separated structural inputs and exclude revision/presentation data; snapshot identity binds revision and exact evidence hash.
+- [Phase 01-02]: Directly type the supplied Git object as commit before peeling so annotated-tag object IDs are rejected. — A full tag OID can satisfy revision^{commit}, so peeling alone does not prove the supplied identity is itself immutable commit evidence.
+- [Phase 01-02]: Preserve complete raw tree inventory while classifying unsupported paths; malformed or incomplete tree protocol remains a hard failure. — Coarse fallback may consume trustworthy unsupported evidence but cannot repair loss of tree completeness.
+- [Phase 01-02]: Return every discovered manifest with explicit count-policy status and exact size probes rather than truncating or partially reading. — The evidence layer can choose truthful whole-project fallback only when accounting is complete.
+- [Phase 01-03]: Represent the valid root manifest as package root `.` with the `root-package` marker while npm workspace `package_roots` contains only matched members. — This keeps every selected manifest represented without making the projector treat repository root as a workspace path group.
+- [Phase 01-03]: Treat trustworthy manifest count and size excess as whole-project fallback, but propagate object stat/read/probe inconsistencies as hard failures. — Policy may reduce detail only after immutable evidence integrity is established.
+- [Phase 01-04]: For npm workspaces, project exactly the complete declared workspace package-root set while retaining the root package manifest as evidence rather than inventing a root room. — Workspace topology must follow declared membership and first-path-segment structure only.
+- [Phase 01-04]: Aggregate only exact cross-room package declarations by ordered room pair, preserving sorted scopes and declaring-manifest evidence while suppressing same-room loops. — Declarations support dependency evidence, not runtime or causality claims.
+- [Phase 01-04]: Collapse every approved unsupported shape or out-of-range room count to one evidence-bound project-root room with no relations or detailed membership. — Coarse fallback must never preserve a partial topology or hide integrity defects.
+- [Phase 01-05]: Independently revalidate reader inventory, manifest policy, path accounting, selected blobs, ledger facts, and topology instead of trusting either producer artifact. — Independence must cover policy and complete facts, not only schema or identity checks.
+- [Phase 01-05]: Classify canonical representation, array order, references, evidence identity, topology identity, and unsupported claims with bounded logical diagnostics. — Stable failure classes make mutation rejection actionable without exposing local or secret data.
+- [Phase 01-05]: Return accepted Buffers through defensive-copy getters while freezing all result metadata. — Node Buffers cannot be deeply frozen, so mutation isolation must be enforced at the API boundary.
+- [Phase 01-06]: Build the success receipt only from frozen gate metadata and bind only evidence/map logical names, exact bytes, repository/tree identity, fixed extractor contract, and topology result. — The receipt stays deterministic, clone-independent, non-self-hashing, and free of volatile execution data.
+- [Phase 01-06]: Publish complete immutable generations before one regular-file CURRENT rename and never delete prior generations. — A once-resolved reader remains valid across concurrent publication and interruption.
+- [Phase 01-06]: Retain deterministic recovery and rollback-failure markers when post-rename restoration fails, and report directory-fsync limitations explicitly. — Recovery never becomes a success claim, while unsupported platform durability is not overclaimed.
+- [Phase 01-07]: Exercise the actual CLI against local clones and resolve each published CURRENT pointer once before exact Buffer comparison. — Determinism claims now cover repository state, transport spelling, environment, and complete published bytes rather than only pure helper output.
+- [Phase 01-07]: Keep the twelve-workspace acceptance data-driven with neutral package names and verify a fully renamed four-group copy. — The required Vibery shape is fixture data produced by generic first-segment grouping, not an implementation branch.
+- [Phase 01-08]: Require named executable closure tables with exact no-omissions assertions for hostile extraction, tamper, publication failure, and isolation evidence. — Phase completion cannot rely on inferred coverage from earlier unit suites.
+- [Phase 01-08]: Run repository-constructible hostility through the real CLI and reserve injected seams for malformed protocol and impossible-to-time filesystem failures. — Acceptance remains end-to-end wherever the local Git/filesystem can construct the case.
+- [Phase 01-08]: Combine a throwing no-network/process preload with static import and Git-command allowlists. — Dynamic success alone cannot prove that dormant provider, browser, renderer, or remote Git routes are absent.
+- [Phase 01-08]: Keep complete ledger evidence for an out-of-range room count while exposing only one coarse room and zero relations. — Full immutable evidence is truthful; only partial topology claims are forbidden.
+- [Phase 01-08 remediation]: Authenticate resolved generations from exact artifact hashes and revalidate every receipt/evidence/map identity binding. — A coherent rewrite must not become authoritative merely by renaming a generation directory.
+- [Phase 01-08 remediation]: Preserve a newer concurrent publisher's CURRENT authority and retain accurate recovery material after commit durability failures. — Rollback may restore only the failed publisher's own pointer identity.
+- [Phase 01-08 remediation]: Prove local-object-only behavior with a real provider-free promisor fixture whose promised blob fails under `GIT_NO_LAZY_FETCH`, remains absent after extraction, and hydrates only in the explicit control read. — Missing-object tests now discriminate disabled lazy fetch from ordinary absence.
+- [Phase 01-08 final remediation]: Reconstruct the complete resolved map from evidence and compare the entire canonical receipt rather than maintaining a second partial binding checklist. — One independent semantic seam now covers package roots, evidence sets, labels, relations, fallback, counts, revision, tree, mode, and artifact hashes.
+- [Phase 01-08 final remediation]: Hold an atomic same-directory publication lock across final authority checks, CURRENT rename, cleanup, and rollback. — No second publisher can commit inside another publisher's check-to-rename or rollback interval.
+- [Phase 01-08 final remediation]: Arm rollback blocking material before CURRENT rename and treat every post-rename inspection error as recovery-required. — Failed or interrupted candidates are never silently readable, while restored prior authority remains available.
+- [Phase 01-08 final remediation]: Treat every unsupported-path manifest candidate as whole-project path fallback even when valid root and workspace manifests also exist. — Detailed topology cannot silently omit traversal-shaped or non-UTF-8 manifest inventory.
+- [Phase 01-08 architecture remediation]: Require a trusted external generation ID before any bundle read and compare `CURRENT` to it exactly. — A coherently recomputed replacement bundle cannot replace control-plane authority.
+- [Phase 01-08 architecture remediation]: Use a fully fsynced unique owner file plus hard link for the fixed publication lock; classify live, stale, reused-PID, and unknown owners without age expiry. — Explicit token recovery is the only stale-owner mutation path.
+- [Phase 01-08 architecture remediation]: Journal the prepared transaction before `CURRENT`, publish forward-only, and return committed-recovery-required after any known post-rename commit problem. — A committed replacement is never reported as a generic failure or rolled back.
+- [Phase 01-08 architecture remediation]: Bound workspace declarations at 512 and match only bounded manifest candidates while including the root manifest in alias collision policy. — Large unrelated inventories cannot amplify workspace selection.
+- [Phase 01-08 Code Reviewer remediation]: Clean unique owner material on pre-authority failure, but retain exact token-addressable state whenever fixed hard-link authority may exist. — Acquisition ambiguity must never strand an owner/lock or collapse into a generic failure without recovery authority.
+- [Phase 01-08 Code Reviewer remediation]: Validate prepared and committed markers together and bind every transaction field set to the observed owner token before inspection or deletion. — Recovery under token A can never delete token B metadata or contradictory markers.
+- [Phase 01-08 Code Reviewer remediation]: Fsync the nearest pre-existing parent plus recursively created parent chain before first-publication lock acquisition. — EIO leaves no CURRENT and unsupported directory fsync explicitly weakens the durability claim.
+- [Phase 01-08 strict cleanup remediation]: Treat an exclusive owner-create collision as foreign, and unlink control material only after exact inode-and-byte ownership checks. — A deterministic token collision must preserve the pre-existing owner and report its actual busy or stale state.
+- [Phase 01-08 strict cleanup remediation]: Distinguish retained token-addressable recovery from owner-release durability uncertainty. — Once owner and lock material are observably absent, no recovery token may be advertised; the committed result instead reports unknown directory durability.
+- [Phase 01-08 final Security/Trust follow-up]: On every first-publication attempt without `CURRENT`, fsync the deterministic physical parent chain through the filesystem root. — A process-restart retry cannot mistake directories left by an earlier failed recursive mkdir for durably published directory entries.
+- [Phase 01-08 final Security/Trust follow-up]: Recognize only a strict canonical committed-marker prefix derived from a valid prepared journal and matching retained owner. — Explicit token recovery can safely discard publisher-interrupted marker bytes, while contradictory or malicious bytes remain authority-indeterminate.
+- [Phase 01-08 strict backslash-path remediation]: Independently classify every backslash-containing Git path as unsupported shape in both reader and gate, then force whole-project path fallback from valid unsupported evidence. — A non-POSIX manifest spelling cannot evade candidate accounting and leave incomplete detailed topology.
+- [Phase 01-08 combined raw-path remediation]: Inspect raw path bytes for forbidden backslash before any UTF-8 decode-failure early return in both independent classifiers, retaining both encoding and shape reasons. — Combined defects must trigger global whole-project path fallback even when the raw path is not a POSIX manifest candidate.
+
+## Performance Metrics
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| 01-01 | 10 min | 2 | 9 |
+| Phase 01 P02 | 9 min | 2 tasks | 3 files |
+| Phase 01 P03 | 8 min | 2 tasks | 2 files |
+| Phase 01 P04 | 7 min | 2 tasks | 2 files |
+| Phase 01 P05 | 9 min | 2 tasks | 2 files |
+| Phase 01 P06 | 12 min | 2 tasks | 5 files |
+| Phase 01 P07 | 10 min | 2 tasks | 3 files |
+| Phase 01 P08 | 16 min | 3 tasks | 5 files |
+
+## Session Continuity
+
+- **Last session:** 2026-09-16T22:18:46.000Z
+- **Stopped at:** Combined invalid-UTF8/raw-backslash remediation complete; all 173 Station tests, 56 focused reader/gate/adversarial tests, 46 architecture/atomic/output tests, and final isolation gates passed
+- **Resume file:** `.planning/phases/01-deterministic-immutable-commit-extraction/01-08-SUMMARY.md`
+
+## Next Action
+
+Phase 1 combined raw-path remediation is complete. Begin downstream host integration only under separately approved scope.

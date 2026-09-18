@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vibery.dev/schemas/station-map-v1.json",
+  "title": "Station Map v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "snapshot", "project", "rooms", "relations", "fallback"],
+  "properties": {
+    "schema": { "const": "station-map/v1" },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "project_id", "revision", "evidence_sha256", "profile", "mode"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^snapshot-[a-f0-9]{64}$" },
+        "project_id": { "type": "string", "pattern": "^project-[a-f0-9]{64}$" },
+        "revision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "evidence_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "profile": { "const": "node-workspaces/v1" },
+        "mode": { "enum": ["structural", "coarse"] }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^project-[a-f0-9]{64}$" },
+        "label": { "type": "string", "minLength": 1 }
+      }
+    },
+    "rooms": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "project_id", "kind", "structural_key", "label", "package_roots", "confidence", "evidence_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^room-[a-f0-9]{64}$" },
+          "project_id": { "type": "string", "pattern": "^project-[a-f0-9]{64}$" },
+          "kind": { "enum": ["component", "coarse-project"] },
+          "structural_key": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "package_roots": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+          "confidence": { "enum": ["high", "coarse"] },
+          "evidence_ids": { "type": "array", "items": { "type": "string", "pattern": "^evidence-[a-f0-9]{64}$" }, "uniqueItems": true }
+        }
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "from_room_id", "to_room_id", "scopes", "evidence_ids"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^relation-[a-f0-9]{64}$" },
+          "kind": { "const": "declared-package-dependency" },
+          "from_room_id": { "type": "string", "pattern": "^room-[a-f0-9]{64}$" },
+          "to_room_id": { "type": "string", "pattern": "^room-[a-f0-9]{64}$" },
+          "scopes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"] }
+          },
+          "evidence_ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^evidence-[a-f0-9]{64}$" } }
+        }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "reason_codes"],
+      "properties": {
+        "used": { "type": "boolean" },
+        "reason_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^station-fallback/[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        }
+      }
+    }
+  }
+}
