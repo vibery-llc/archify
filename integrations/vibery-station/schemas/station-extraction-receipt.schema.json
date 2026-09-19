@@ -76,7 +76,7 @@
         "project_id": { "type": "string", "pattern": "^project-[a-f0-9]{64}$" },
         "snapshot_id": { "type": "string", "pattern": "^snapshot-[a-f0-9]{64}$" },
         "mode": { "enum": ["structural", "coarse"] },
-        "rooms": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "rooms": { "type": "integer", "minimum": 1, "maximum": 64 },
         "relations": { "type": "integer", "minimum": 0 },
         "fallback": { "type": "boolean" },
         "fallback_reason_codes": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^station-fallback/[a-z0-9]+(?:-[a-z0-9]+)*$" } }

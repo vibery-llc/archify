@@ -19,7 +19,7 @@
 ### Station Projection
 
 - [x] **MAP-01**: The projector derives project, room, relation, evidence, and snapshot IDs from versioned canonical structural inputs; durable topology IDs exclude revision, display labels, and layout.
-- [x] **MAP-02**: Supported Node/npm workspaces produce a complete, disjoint, sorted one-to-five-room `station-map/v1` projection grouped by first workspace path segment, with exact aggregated cross-room dependency directions and no same-room self-loop topology.
+- [x] **MAP-02**: Supported Node/npm workspaces produce a complete, disjoint, sorted per-package `station-map/v1` projection — one component room per full workspace package root, up to a documented 64-room structural cap — with exact aggregated cross-room dependency directions and no same-room self-loop topology.
 - [x] **MAP-03**: Unsupported but integrity-valid repository shapes produce exactly one evidence-bound `coarse-project` room, zero relations, `confidence: coarse`, and one or more versioned fallback reason codes without partial detailed claims.
 
 ### Fail-Closed Gate
@@ -37,7 +37,7 @@
 - [x] **BOUND-01**: The implementation is isolated under `integrations/vibery-station/` and does not change default Archify CLI, core schemas/renderers, Viewer runtime, generated artifacts, or `archify.zip` behavior.
 - [x] **TEST-01**: Provider-free tests prove byte-identical output across different clones, dirty worktrees, and checked-out branches, while README-only revisions change snapshot identity but preserve durable topology IDs.
 - [x] **TEST-02**: Provider-free adversarial tests cover replacement refs, missing and promised-but-unhydrated local objects, symlink/gitlink/binary/invalid-UTF-8/path-collision inputs, resource budgets, all fallback reasons, every gate-tamper class, unsafe targets, interrupted commits, concurrent publishers, and rollback failure.
-- [x] **TEST-03**: A Vibery-shaped fixture with twelve workspaces deterministically produces four structural rooms and exactly the expected aggregated cross-room relation directions without product-specific code or an LLM.
+- [x] **TEST-03**: A Vibery-shaped fixture with twelve workspaces deterministically produces twelve structural rooms and exactly seven aggregated cross-room relation directions without product-specific code or an LLM.
 
 ## v2 Requirements
 
@@ -60,7 +60,7 @@
 | LLM synthesis or semantic naming | Breaks byte determinism and would turn interpretation into authority. |
 | Checkout-file reads | Makes dirty state, current branch, and filesystem symlinks part of evidence. |
 | Remote clone/fetch or partial-clone hydration | Phase 1 is local-object-only and network-independent. |
-| Partial top-five package maps | Omits supported evidence and falsely presents an incomplete graph as detailed. |
+| Partial package-room maps | Omits supported evidence and falsely presents an incomplete graph as detailed. |
 | Default Archify CLI/schema/renderer/Viewer changes | Risks upstream behavior and packaged zero-install guarantees. |
 | Production host registration or permissions | Requires separate host-side contracts and approval. |
 | UI, rendering, Unity projection, and operational overlays | Phase 1 ends at validated JSON IR and receipts. |

@@ -56,6 +56,24 @@ function expectedRoots(group) {
   return MEMBER_NAMES.map((member) => `${group}/${member}`).sort();
 }
 
+// Per-package declared dependency directions (by 0-based package index).
+// unit-01..12 map to groups×members in order: group0 alpha..gamma (0-2),
+// group1 (3-5), group2 (6-8), group3 (9-11).
+const PACKAGE_DIRECTIONS = Object.freeze([
+  [0, 9, ['dependencies']],
+  [1, 10, ['optionalDependencies']],
+  [3, 9, ['devDependencies']],
+  [4, 11, ['peerDependencies']],
+  [6, 10, ['dependencies']],
+  [6, 9, ['peerDependencies']],
+  [9, 10, ['dependencies']],
+]);
+
+function directionLabel(root) {
+  const parts = root.split('/');
+  return parts.length > 1 ? parts.slice(1).join('/') : root;
+}
+
 function assertTwelveWorkspaceShape(values, groups) {
   const { evidence, map, receipt } = values;
   assert.equal(evidence.workspace.package_roots.length, 12);
@@ -63,56 +81,50 @@ function assertTwelveWorkspaceShape(values, groups) {
   assert.equal(map.snapshot.mode, 'structural');
   assert.equal(map.fallback.used, false);
   assert.deepEqual(map.fallback.reason_codes, []);
-  assert.equal(map.rooms.length, 4);
-  assert.equal(map.relations.length, 3);
-  assert.equal(receipt.result.rooms, 4);
-  assert.equal(receipt.result.relations, 3);
+  assert.equal(map.rooms.length, 12);
+  assert.equal(map.relations.length, 7);
+  assert.equal(receipt.result.rooms, 12);
+  assert.equal(receipt.result.relations, 7);
 
-  const rooms = roomIndex(map);
-  assert.deepEqual([...rooms.keys()].sort(), [...groups].sort());
-  for (const group of groups) {
-    const room = rooms.get(group);
-    assert.equal(room.structural_key, `workspace-path-group:${group}`);
-    assert.deepEqual(room.package_roots, expectedRoots(group));
+  const roomsByRoot = new Map(map.rooms.map((room) => [room.package_roots[0], room]));
+  assert.deepEqual([...roomsByRoot.keys()].sort(), evidence.workspace.package_roots);
+  for (const [root, room] of roomsByRoot) {
+    assert.equal(room.structural_key, `workspace-package:${root}`);
+    assert.deepEqual(room.package_roots, [root]);
     assert.equal(room.confidence, 'high');
   }
   assert.deepEqual(map.rooms.flatMap(({ package_roots: roots }) => roots).sort(), evidence.workspace.package_roots);
 
-  const directions = relationByDirection(map);
-  const expectedDirections = groups.slice(0, 3).map((group) => `${group} -> ${groups[3]}`).sort();
-  assert.deepEqual([...directions.keys()].sort(), expectedDirections);
-  const expectedRelations = [
-    {
-      direction: expectedDirections.find((value) => value.startsWith(`${groups[0]} ->`)),
-      scopes: ['dependencies', 'optionalDependencies'],
-      evidenceRoots: [`${groups[0]}/alpha`, `${groups[0]}/beta`],
-    },
-    {
-      direction: expectedDirections.find((value) => value.startsWith(`${groups[1]} ->`)),
-      scopes: ['devDependencies', 'peerDependencies'],
-      evidenceRoots: [`${groups[1]}/alpha`, `${groups[1]}/beta`],
-    },
-    {
-      direction: expectedDirections.find((value) => value.startsWith(`${groups[2]} ->`)),
-      scopes: ['dependencies', 'peerDependencies'],
-      evidenceRoots: [`${groups[2]}/alpha`],
-    },
-  ];
+  const relationById = new Map(map.relations.map((relation) => [relation.id, relation]));
+  assert.deepEqual(map.relations.map(({ id }) => id).sort(), map.relations.map(({ id }) => id).sort());
+  const packagesByIndex = new Map(evidence.packages.filter(({ root }) => root !== '.')
+    .map((record) => [Number(record.name.slice('unit-'.length)) - 1, record]));
+  const expectedRelations = PACKAGE_DIRECTIONS.map(([fromIndex, toIndex, scopes]) => {
+    const from = packagesByIndex.get(fromIndex);
+    const to = packagesByIndex.get(toIndex);
+    return {
+      id: deriveRelationId(roomsByRoot.get(from.root).id, roomsByRoot.get(to.root).id),
+      from_room_id: roomsByRoot.get(from.root).id,
+      to_room_id: roomsByRoot.get(to.root).id,
+      scopes: [...scopes].sort(),
+      evidence_ids: [from.manifest_evidence_id],
+    };
+  });
+  assert.equal(map.relations.length, expectedRelations.length);
   for (const expected of expectedRelations) {
-    const relation = directions.get(expected.direction);
-    assert.ok(relation, expected.direction);
+    const relation = relationById.get(expected.id);
+    assert.ok(relation, `missing relation ${expected.id}`);
     assert.deepEqual(relation.scopes, expected.scopes);
-    assert.deepEqual(relation.evidence_ids, evidenceIdsForRoots(evidence, expected.evidenceRoots));
+    assert.deepEqual(relation.evidence_ids, expected.evidence_ids);
     assert.equal(relation.id, deriveRelationId(relation.from_room_id, relation.to_room_id));
     assert.notEqual(relation.from_room_id, relation.to_room_id);
   }
-  const packageRoom = rooms.get(groups[3]);
   assert.equal(map.relations.some(({ from_room_id, to_room_id }) => (
-    from_room_id === packageRoom.id && to_room_id === packageRoom.id
+    from_room_id === to_room_id
   )), false, 'same-room declaration became a topology self-loop');
   return {
     memberCounts: map.rooms.map(({ package_roots }) => package_roots.length).sort(),
-    relationScopes: [...directions.values()].map(({ scopes }) => scopes).sort((left, right) => left.join().localeCompare(right.join())),
+    relationScopes: map.relations.map(({ scopes }) => scopes).sort((left, right) => left.join().localeCompare(right.join())),
   };
 }
 
@@ -139,7 +151,7 @@ function assertNoNonmechanicalParticipation(values) {
   assert.doesNotMatch(serialized, /"(?:llm|model|prompt|completion|provider_result|provider_response)"\s*:/i);
 }
 
-test('real CLI projects the generic twelve-workspace fixture into four rooms and three exact directions', () => {
+test('real CLI projects the generic twelve-workspace fixture into twelve rooms and seven exact directions', () => {
   const fixture = createTwelveWorkspaceRepository({
     groups: VIBERY_GROUPS,
     repositoryName: 'vibery-shape-acceptance',
@@ -161,6 +173,9 @@ test('renaming every first-segment label preserves generic structural behavior',
   const originalShape = assertTwelveWorkspaceShape(original, VIBERY_GROUPS);
   const renamedShape = assertTwelveWorkspaceShape(renamed, RENAMED_GROUPS);
   assert.deepEqual(renamedShape, originalShape);
-  assert.deepEqual(renamed.map.rooms.map(({ label }) => label).sort(), [...RENAMED_GROUPS].sort());
+  assert.deepEqual(
+    renamed.map.rooms.map(({ label }) => label).sort(),
+    RENAMED_GROUPS.flatMap(expectedRoots).sort(),
+  );
   assert.equal(renamed.map.rooms.some(({ label }) => VIBERY_GROUPS.includes(label)), false);
 });

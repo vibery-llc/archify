@@ -22,7 +22,7 @@ Given the same repository identity and exact commit, Station receives byte-ident
 - [ ] Read only an explicit full commit from a local Git object database, independent of checkout state and without network access.
 - [ ] Emit deterministic `station-evidence/v1`, `station-map/v1`, and `station-extraction-receipt/v1` JSON artifacts.
 - [ ] Derive stable project, room, relation, evidence, and snapshot identities from canonical repository and structural facts.
-- [ ] Produce a complete one-to-five-room structural map when evidence supports it, otherwise one explicit coarse room.
+- [ ] Produce a complete per-package structural map — one room per full workspace package root, up to a 64-room structural cap — when evidence supports it, otherwise one explicit coarse room.
 - [ ] Recompute and validate every derived field and reference at a fail-closed gate before publication.
 - [ ] Atomically publish all artifacts while preserving the last-known-good set on every failure.
 - [ ] Prove determinism, tamper rejection, fallback truthfulness, and hostile Git/path handling with provider-free tests.
@@ -41,7 +41,7 @@ Given the same repository identity and exact commit, Station receives byte-ident
 
 The brownfield repository is a Node 18+ native-ESM, zero-install compiler pipeline from typed JSON IR to validated standalone HTML. Existing repository evidence proves user-authored claims but does not extract repository structure. The closest reusable seams are `archify/delta/architecture-delta.mjs` for canonicalization and identity-aware comparison, `archify/bin/archify.mjs` for staged atomic delivery and receipts, and `integrations/deepseek-harness/` for profile isolation.
 
-Phase research at `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md` establishes a bounded Node/npm workspace profile. The current Vibery repository shape deterministically collapses twelve declared workspaces into four first-segment rooms with three cross-room dependency directions, but this is a fixture expectation rather than product-specific implementation logic.
+Phase research at `.planning/phases/01-deterministic-immutable-commit-extraction/01-RESEARCH.md` establishes a bounded Node/npm workspace profile. The current Vibery repository shape deterministically projects twelve declared workspaces into twelve full package-root rooms with cross-room dependency directions, but this is a fixture expectation rather than product-specific implementation logic.
 
 ## Constraints
 
@@ -60,7 +60,7 @@ Phase research at `.planning/phases/01-deterministic-immutable-commit-extraction
 |----------|-----------|---------|
 | Use a pure evidence → projector → gate pipeline | Prevents synthesis from becoming authority and keeps every claim mechanically reproducible | — Pending |
 | Stop Phase 1 at `station-map/v1` rather than Architecture v1 renderer IR | Existing renderer component types would invent semantics and source limits do not fit grouped evidence | — Pending |
-| Group npm workspaces by first path segment only when that yields one-to-five complete groups | Structural, deterministic, explainable, and bounded without product-specific labels | — Pending |
+| Group npm workspaces into one room per full package root up to a 64-room structural cap | Structural, deterministic, explainable, and bounded without product-specific labels | — Pending |
 | Emit one `coarse-project` room for supported-but-underdetermined shapes | Completeness is more truthful than selecting a partial detailed graph | — Pending |
 | Derive durable IDs without revision, labels, or layout | Topology identity must survive equivalent rescans and display-name changes | — Pending |
 | Keep the profile isolated under `integrations/vibery-station/` | Protects the zero-install packaged Skill and default CLI behavior | — Pending |

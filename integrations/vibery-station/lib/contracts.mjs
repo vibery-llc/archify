@@ -11,6 +11,7 @@ export const STATION_SCHEMAS = Object.freeze({
 
 export const STATION_PROFILE = 'node-workspaces/v1';
 export const STATION_CONTRACT_VERSION = 1;
+export const MAX_STRUCTURAL_ROOMS = 64;
 export const STATION_LIMITS = Object.freeze({
   max_tree_bytes: 16 * 1024 * 1024,
   max_manifest_count: 512,
@@ -337,7 +338,7 @@ export function validateStationMap(value) {
   string(value.project.label, artifact, '/project/label');
   if (value.snapshot.project_id !== value.project.id) invalid(artifact, '/snapshot/project_id', 'project.id', value.snapshot.project_id);
 
-  array(value.rooms, artifact, '/rooms', { min: 1, max: 5 });
+  array(value.rooms, artifact, '/rooms', { min: 1, max: MAX_STRUCTURAL_ROOMS });
   value.rooms.forEach((entry, index) => validateRoom(entry, artifact, index));
   for (const [index, room] of value.rooms.entries()) {
     if (room.project_id !== value.project.id) invalid(artifact, `/rooms/${index}/project_id`, 'project.id', room.project_id);
@@ -400,7 +401,7 @@ export function validateStationExtractionReceipt(value) {
   id(value.result.project_id, 'project', artifact, '/result/project_id');
   id(value.result.snapshot_id, 'snapshot', artifact, '/result/snapshot_id');
   string(value.result.mode, artifact, '/result/mode', { values: ['structural', 'coarse'] });
-  integer(value.result.rooms, artifact, '/result/rooms', { min: 1, max: 5 });
+  integer(value.result.rooms, artifact, '/result/rooms', { min: 1, max: MAX_STRUCTURAL_ROOMS });
   integer(value.result.relations, artifact, '/result/relations');
   boolean(value.result.fallback, artifact, '/result/fallback');
   fallbackReasons(value.result.fallback_reason_codes, artifact, '/result/fallback_reason_codes');

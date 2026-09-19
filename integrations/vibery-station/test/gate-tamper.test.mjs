@@ -29,7 +29,7 @@ export const GATE_TAMPER_MATRIX = Object.freeze([
   'relation-endpoint', 'relation-direction', 'relation-scope', 'relation-evidence-set',
   'relation-omission', 'relation-invention', 'relation-self-loop',
   'evidence-hash', 'fallback-false-cause', 'fallback-omitted-cause', 'fallback-unknown-cause',
-  'sixth-room', 'duplicate-room', 'omitted-room',
+  'duplicate-room', 'omitted-room', 'sixty-fifth-room',
   'invalid-utf8', 'invalid-json', 'noncanonical-json', 'noncanonical-newline',
   'coherent-evidence-map-pair', 'false-detailed-to-coarse-downgrade',
 ]);
@@ -151,7 +151,7 @@ function semanticRows(base) {
   add('relation-order', 'map', (value) => { value.relations.reverse(); }, 'station-gate/order-mismatch');
   add('package-duplication', 'evidence', (value) => { value.packages.push(clone(value.packages[0])); }, 'station-gate/unsupported-claim');
   add('analysis-count', 'evidence', (value) => { value.analysis.selected_manifest_count += 1; }, 'station-gate/unsupported-claim');
-  add('room-structural-key', 'map', (value) => { value.rooms[0].structural_key = 'workspace-path-group:invented'; }, 'station-gate/unsupported-claim');
+  add('room-structural-key', 'map', (value) => { value.rooms[0].structural_key = 'workspace-package:invented'; }, 'station-gate/unsupported-claim');
   add('room-label', 'map', (value) => { value.rooms[0].label = 'invented'; }, 'station-gate/unsupported-claim');
   add('room-confidence', 'map', (value) => { value.rooms[0].confidence = 'coarse'; }, 'station-gate/schema-invalid');
   add('room-membership', 'map', (value) => { value.rooms[0].package_roots = ['invented/root']; }, 'station-gate/unsupported-claim');
@@ -164,8 +164,8 @@ function semanticRows(base) {
   add('relation-invention', 'map', (value) => { value.relations.push({ ...clone(value.relations[0]), id: `relation-${OTHER_64}` }); }, 'station-gate/unsupported-claim');
   add('relation-self-loop', 'map', (value) => { value.relations[0].to_room_id = value.relations[0].from_room_id; }, 'station-gate/schema-invalid');
   add('evidence-hash', 'map', (value) => { value.snapshot.evidence_sha256 = OTHER_64; }, 'station-gate/topology-identity-mismatch');
-  add('sixth-room', 'map', (value) => {
-    while (value.rooms.length < 6) value.rooms.push({ ...clone(value.rooms[0]), id: `room-${String(value.rooms.length).padStart(64, '0')}` });
+  add('sixty-fifth-room', 'map', (value) => {
+    while (value.rooms.length < 65) value.rooms.push({ ...clone(value.rooms[0]), id: `room-${String(value.rooms.length).padStart(64, '0')}` });
   }, 'station-gate/schema-invalid');
   add('duplicate-room', 'map', (value) => { value.rooms.push(clone(value.rooms[0])); }, 'station-gate/unsupported-claim');
   add('omitted-room', 'map', (value) => { value.rooms.pop(); }, 'station-gate/unsupported-claim');

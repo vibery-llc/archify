@@ -35,7 +35,7 @@ export const ADVERSARIAL_EXTRACTION_MATRIX = Object.freeze([
   'invalid-utf8-raw-backslash-manifest',
   'invalid-path-shape', 'case-collision', 'unicode-nfc-collision',
   'unsupported-glob', 'missing-root-manifest', 'malformed-manifest', 'oversized-manifest',
-  'zero-workspace-matches', 'duplicate-package-identity', 'more-than-five-groups',
+  'zero-workspace-matches', 'duplicate-package-identity', 'more-than-64-packages',
   'manifest-count-512', 'manifest-count-513',
   'manifest-bytes-1mib', 'manifest-bytes-1mib-plus-one',
   'selected-bytes-8mib', 'selected-bytes-8mib-plus-one',
@@ -555,16 +555,16 @@ test('every documented structural fallback cause is exact and never preserves pa
       'packages/a/package.json': json({ name: 'same' }),
       'packages/b/package.json': json({ name: 'same' }),
     }, ['station-fallback/package-name-ambiguous']],
-    ['more-than-five-groups', Object.fromEntries([
-      ['package.json', json({ name: 'root', workspaces: ['a/*', 'b/*', 'c/*', 'd/*', 'e/*', 'f/*'] })],
-      ...['a', 'b', 'c', 'd', 'e', 'f'].map((group) => [`${group}/one/package.json`, json({ name: `${group}-one` })]),
+    ['more-than-64-packages', Object.fromEntries([
+      ['package.json', json({ name: 'root', workspaces: ['packages/*'] })],
+      ...Array.from({ length: 65 }, (_, index) => [`packages/p${String(index).padStart(2, '0')}/package.json`, json({ name: `p${index}` })]),
     ]), ['station-fallback/room-count-out-of-range']],
   ];
   for (const [name, files, reasons] of rows) {
     assertCoarse(
       createGitFixture({ files }),
       reasons,
-      { evidenceMayRemainDetailed: name === 'more-than-five-groups' },
+      { evidenceMayRemainDetailed: name === 'more-than-64-packages' },
     );
     cover(name);
   }
@@ -583,7 +583,11 @@ test('512-manifest and one-MiB policy boundaries are executable on both sides', 
   const exactPublished = readBundle(exactRun.bundleRoot);
   assert.equal(exactPublished.evidence.analysis.discovered_manifest_count, 512);
   assert.equal(exactPublished.evidence.analysis.detail_eligible, true);
-  assert.equal(exactPublished.map.snapshot.mode, 'structural');
+  // The 512-manifest policy boundary executes (evidence stays detailed), but
+  // 511 workspace packages exceed the 64-room structural cap, so the truthful
+  // projection is one evidence-bound coarse room.
+  assert.equal(exactPublished.map.snapshot.mode, 'coarse');
+  assert.deepEqual(exactPublished.map.fallback.reason_codes, ['station-fallback/room-count-out-of-range']);
   cover('manifest-count-512');
 
   exactFiles['packages/p511/package.json'] = json({ name: 'p511' });
