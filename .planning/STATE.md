@@ -42,7 +42,7 @@ Plan: 8 of 8 implementation plans complete; final remediation verified
 - One exact local 40-character commit; Git tree/blob objects only.
 - No network, remote fetch, lazy hydration, provider dependency, or installation.
 - Deterministic `station-evidence/v1`, `station-map/v1`, and `station-extraction-receipt/v1` bytes.
-- Complete one-to-five-room structural projection or one explicit coarse room.
+- Complete per-package structural projection (one room per full workspace package root, up to a 64-room structural cap) or one explicit coarse room.
 - Hard integrity failures publish nothing; coarse fallback is never an integrity escape hatch.
 - Three-artifact publication uses immutable generations, an owner-aware regular hard-link lock, a forward-only prepared journal, and one atomically replaced regular-file `CURRENT` pointer; readers require an external trusted generation anchor and prior generations remain intact.
 - No rendering, Viewer/UI, Unity, host registration, LLM synthesis, broad package-manager analysis, or default Archify behavior changes.
@@ -116,6 +116,7 @@ Independent recheck `aed4d3d2-e7c4-4fa5-84f5-fb4cf686a612` returned **PASSED**. 
 - [Phase 01-08 final Security/Trust follow-up]: Recognize only a strict canonical committed-marker prefix derived from a valid prepared journal and matching retained owner. — Explicit token recovery can safely discard publisher-interrupted marker bytes, while contradictory or malicious bytes remain authority-indeterminate.
 - [Phase 01-08 strict backslash-path remediation]: Independently classify every backslash-containing Git path as unsupported shape in both reader and gate, then force whole-project path fallback from valid unsupported evidence. — A non-POSIX manifest spelling cannot evade candidate accounting and leave incomplete detailed topology.
 - [Phase 01-08 combined raw-path remediation]: Inspect raw path bytes for forbidden backslash before any UTF-8 decode-failure early return in both independent classifiers, retaining both encoding and shape reasons. — Combined defects must trigger global whole-project path fallback even when the raw path is not a POSIX manifest candidate.
+- [Phase 01 B2 per-package depth]: Project one component room per full workspace package root (up to `MAX_STRUCTURAL_ROOMS = 64`) instead of collapsing by first path segment, so Station renders each declared workspace package as its own wing room. — Lou-driven depth change; stable full-root structural keys and labels preserve byte-identical rescans, and "hundreds-of-nodes" traversal remains deferred to B1.
 
 ## Performance Metrics
 

@@ -118,8 +118,8 @@ function validMap() {
       id: ROOM_ID,
       project_id: PROJECT_ID,
       kind: 'component',
-      structural_key: 'workspace-path-group:packages',
-      label: 'packages',
+      structural_key: 'workspace-package:packages/api',
+      label: 'packages/api',
       package_roots: ['packages/api'],
       confidence: 'high',
       evidence_ids: [EVIDENCE_ID],
@@ -508,13 +508,13 @@ test('versioned identity formulas match fixed NUL-separated vectors', async () =
     deriveEvidenceId('packages/api/package.json', HEX_40_A),
     'evidence-35b19ae1eed4c5017e100b706532f1eee04dea073a8032167bbbae151bb42433',
   );
-  const fromRoomId = deriveRoomId(projectId, 'workspace-path-group:packages');
-  const toRoomId = deriveRoomId(projectId, 'workspace-path-group:apps');
-  assert.equal(fromRoomId, 'room-23d30ddddb103ef58d6c7392b0bf2a76a39853518a3a4da53c23ae0820ac4db2');
-  assert.equal(toRoomId, 'room-49ae7eba2e5643c52e4659681e5dfaaa339307450d7113ec37d897cb4eca9dde');
+  const fromRoomId = deriveRoomId(projectId, 'workspace-package:packages/api');
+  const toRoomId = deriveRoomId(projectId, 'workspace-package:apps/api');
+  assert.equal(fromRoomId, 'room-ebbc0f53c8d19e44ff31a42c81155d0d5bfd928df8d007a13e04854f6dcb47bf');
+  assert.equal(toRoomId, 'room-efb25dabaf8b125b53e15ee484c07cce72f909640858afbe103f0b526b308592');
   assert.equal(
     deriveRelationId(fromRoomId, toRoomId),
-    'relation-7edc83f72f0e7a632238b074918663447a78ce8d3463849373b6325214ba37a0',
+    'relation-d1b8ed922abef1b161d6016f8af8dbe9fd8811de7f2497b04465b84ea5a7c65d',
   );
   assert.equal(
     deriveSnapshotId(projectId, HEX_40_B, 'c'.repeat(64), 'node-workspaces/v1'),
@@ -542,9 +542,9 @@ test('durable topology identities exclude revision, labels, layout, and traversa
     layout: { x: 900, y: 1 },
     revision: HEX_40_B,
   };
-  const beforeRooms = ['workspace-path-group:apps', 'workspace-path-group:packages']
+  const beforeRooms = ['workspace-package:apps/api', 'workspace-package:packages/api']
     .map((key) => deriveRoomId(before.project, key));
-  const afterRooms = ['workspace-path-group:packages', 'workspace-path-group:apps']
+  const afterRooms = ['workspace-package:packages/api', 'workspace-package:apps/api']
     .map((key) => deriveRoomId(after.project, key));
 
   assert.equal(before.project, after.project);

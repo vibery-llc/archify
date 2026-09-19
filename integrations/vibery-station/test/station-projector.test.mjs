@@ -155,8 +155,8 @@ test('projects a non-workspace root package as one exact structural room', async
   assert.deepEqual(result.bytes, canonicalJsonBytes(result.value));
 });
 
-test('projects every complete one-to-five workspace path group without truncation or overlap', async () => {
-  for (let count = 1; count <= 5; count += 1) {
+test('projects every workspace package as its own exact structural room without truncation or overlap', async () => {
+  for (let count = 1; count <= 6; count += 1) {
     const evidence = evidenceValue({ workspacePackages: workspacePackages(count) });
     const { value } = await project(evidence);
     assert.equal(value.snapshot.mode, 'structural');
@@ -167,16 +167,15 @@ test('projects every complete one-to-five workspace path group without truncatio
     assert.deepEqual(projectedRoots, [...evidence.workspace.package_roots].sort());
     assert.equal(new Set(projectedRoots).size, projectedRoots.length);
     for (const room of value.rooms) {
-      const segment = room.package_roots[0].split('/')[0];
-      assert.equal(room.structural_key, `workspace-path-group:${segment}`);
-      assert.equal(room.label, segment);
-      assert.ok(room.package_roots.every((root) => root.split('/')[0] === segment));
+      assert.equal(room.structural_key, `workspace-package:${room.package_roots[0]}`);
+      assert.equal(room.label, room.package_roots[0]);
+      assert.deepEqual(room.package_roots, [room.package_roots[0]]);
       assert.deepEqual(room.evidence_ids, [...room.evidence_ids].sort());
     }
   }
 });
 
-test('aggregates only exact cross-room package declarations with direction, scopes, and provenance', async () => {
+test('aggregates only exact cross-package declared dependencies with direction, scopes, and provenance', async () => {
   const evidence = evidenceValue({
     workspacePackages: [
       {
@@ -209,29 +208,58 @@ test('aggregates only exact cross-room package declarations with direction, scop
     ],
   });
   const { value } = await project(evidence);
-  const apps = value.rooms.find(({ label }) => label === 'apps');
-  const packages = value.rooms.find(({ label }) => label === 'packages');
+  const roomByRoot = new Map(value.rooms.map((room) => [room.package_roots[0], room]));
   const packageByRoot = new Map(evidence.packages.map((entry) => [entry.root, entry]));
 
-  assert.equal(value.relations.length, 2);
+  assert.equal(value.rooms.length, 4);
+  assert.equal(value.relations.length, 6);
   assert.deepEqual(value.relations.map(({ id }) => id), value.relations.map(({ id }) => id).sort());
   assert.deepEqual(value.relations, [
     {
-      id: deriveRelationId(apps.id, packages.id),
+      id: deriveRelationId(roomByRoot.get('apps/api').id, roomByRoot.get('packages/core').id),
       kind: 'declared-package-dependency',
-      from_room_id: apps.id,
-      to_room_id: packages.id,
-      scopes: ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'],
-      evidence_ids: [
-        packageByRoot.get('apps/api').manifest_evidence_id,
-        packageByRoot.get('apps/worker').manifest_evidence_id,
-      ].sort(),
+      from_room_id: roomByRoot.get('apps/api').id,
+      to_room_id: roomByRoot.get('packages/core').id,
+      scopes: ['dependencies', 'peerDependencies'],
+      evidence_ids: [packageByRoot.get('apps/api').manifest_evidence_id],
     },
     {
-      id: deriveRelationId(packages.id, apps.id),
+      id: deriveRelationId(roomByRoot.get('apps/api').id, roomByRoot.get('packages/ui').id),
       kind: 'declared-package-dependency',
-      from_room_id: packages.id,
-      to_room_id: apps.id,
+      from_room_id: roomByRoot.get('apps/api').id,
+      to_room_id: roomByRoot.get('packages/ui').id,
+      scopes: ['devDependencies'],
+      evidence_ids: [packageByRoot.get('apps/api').manifest_evidence_id],
+    },
+    {
+      id: deriveRelationId(roomByRoot.get('apps/worker').id, roomByRoot.get('apps/api').id),
+      kind: 'declared-package-dependency',
+      from_room_id: roomByRoot.get('apps/worker').id,
+      to_room_id: roomByRoot.get('apps/api').id,
+      scopes: ['optionalDependencies'],
+      evidence_ids: [packageByRoot.get('apps/worker').manifest_evidence_id],
+    },
+    {
+      id: deriveRelationId(roomByRoot.get('apps/worker').id, roomByRoot.get('packages/core').id),
+      kind: 'declared-package-dependency',
+      from_room_id: roomByRoot.get('apps/worker').id,
+      to_room_id: roomByRoot.get('packages/core').id,
+      scopes: ['optionalDependencies'],
+      evidence_ids: [packageByRoot.get('apps/worker').manifest_evidence_id],
+    },
+    {
+      id: deriveRelationId(roomByRoot.get('packages/core').id, roomByRoot.get('packages/ui').id),
+      kind: 'declared-package-dependency',
+      from_room_id: roomByRoot.get('packages/core').id,
+      to_room_id: roomByRoot.get('packages/ui').id,
+      scopes: ['peerDependencies'],
+      evidence_ids: [packageByRoot.get('packages/core').manifest_evidence_id],
+    },
+    {
+      id: deriveRelationId(roomByRoot.get('packages/ui').id, roomByRoot.get('apps/api').id),
+      kind: 'declared-package-dependency',
+      from_room_id: roomByRoot.get('packages/ui').id,
+      to_room_id: roomByRoot.get('apps/api').id,
       scopes: ['dependencies'],
       evidence_ids: [packageByRoot.get('packages/ui').manifest_evidence_id],
     },
@@ -347,7 +375,7 @@ test('collapses every evidence-builder fallback reason to one evidence-bound coa
   ]);
 });
 
-test('collapses zero or more-than-five structural groups without retaining partial detail', async () => {
+test('collapses zero or more-than-64 workspace packages without retaining partial detail', async () => {
   const zeroGroups = evidenceValue();
   zeroGroups.workspace = {
     kind: 'npm-workspaces',
@@ -359,13 +387,13 @@ test('collapses zero or more-than-five structural groups without retaining parti
     'station-fallback/room-count-out-of-range',
   ], '@example/root');
 
-  const sixGroups = evidenceValue({ workspacePackages: workspacePackages(6) });
-  const result = await project(sixGroups);
-  assertCoarseMap(result, sixGroups, [
+  const sixtyFivePackages = evidenceValue({ workspacePackages: workspacePackages(65) });
+  const result = await project(sixtyFivePackages);
+  assertCoarseMap(result, sixtyFivePackages, [
     'station-fallback/room-count-out-of-range',
   ], '@example/root');
-  assert.equal(result.value.rooms[0].evidence_ids.length, 7);
-  assert.ok(result.value.rooms[0].evidence_ids.includes(sixGroups.workspace.root_manifest_evidence_id));
+  assert.equal(result.value.rooms[0].evidence_ids.length, 66);
+  assert.ok(result.value.rooms[0].evidence_ids.includes(sixtyFivePackages.workspace.root_manifest_evidence_id));
 });
 
 test('rejects malformed, identity-inconsistent, unknown, or byte-tampered evidence as hard diagnostics', async () => {

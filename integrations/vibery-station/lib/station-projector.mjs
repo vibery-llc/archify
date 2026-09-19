@@ -1,5 +1,6 @@
 import { parseRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import {
+  MAX_STRUCTURAL_ROOMS,
   STATION_PROFILE,
   STATION_SCHEMAS,
   validateStationEvidence,
@@ -25,7 +26,7 @@ import {
 
 const ROOT_STRUCTURAL_KEY = 'root-package';
 const COARSE_STRUCTURAL_KEY = 'project-root';
-const WORKSPACE_STRUCTURAL_PREFIX = 'workspace-path-group:';
+const WORKSPACE_STRUCTURAL_PREFIX = 'workspace-package:';
 
 function sortedUnique(values, comparator = compareCodePoints) {
   return [...new Set(values)].sort(comparator);
@@ -127,25 +128,18 @@ function structuralRooms(evidence, projectId, indexes) {
     integrityFailure('Detailed workspace membership is not complete and exhaustive.');
   }
 
-  const groups = new Map();
-  for (const root of evidence.workspace.package_roots) {
+  // B2 depth: one component room per full workspace package root. Each room
+  // carries exactly one package root, so package-to-package declared
+  // dependencies project as direct cross-room edges with no segment collapse.
+  return evidence.workspace.package_roots.map((root) => {
     const packageRecord = indexes.byRoot.get(root);
     if (!packageRecord || root === '.') {
       integrityFailure('Detailed workspace membership does not resolve to one selected package.', {
         package_root: root,
       });
     }
-    const segment = root.split('/')[0];
-    const members = groups.get(segment) || [];
-    members.push(packageRecord);
-    groups.set(segment, members);
-  }
-  return [...groups].map(([segment, packages]) => componentRoom(
-    projectId,
-    `${WORKSPACE_STRUCTURAL_PREFIX}${segment}`,
-    segment,
-    packages,
-  )).sort(compareRooms);
+    return componentRoom(projectId, `${WORKSPACE_STRUCTURAL_PREFIX}${root}`, root, [packageRecord]);
+  }).sort(compareRooms);
 }
 
 function structuralRelations(evidence, rooms, indexes) {
@@ -257,7 +251,7 @@ export function projectStationMap(validatedEvidence, evidenceBytes) {
 
   const indexes = packageIndex(validatedEvidence);
   const rooms = structuralRooms(validatedEvidence, project.projectId, indexes);
-  if (rooms.length < 1 || rooms.length > 5) {
+  if (rooms.length < 1 || rooms.length > MAX_STRUCTURAL_ROOMS) {
     return coarseMap(validatedEvidence, evidenceHash, project, [
       'station-fallback/room-count-out-of-range',
     ]);

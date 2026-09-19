@@ -2,6 +2,7 @@ import { TextDecoder } from 'node:util';
 import { parseRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import {
   DEPENDENCY_SCOPES,
+  MAX_STRUCTURAL_ROOMS,
   STATION_CONTRACT_VERSION,
   STATION_LIMITS,
   STATION_PROFILE,
@@ -642,18 +643,14 @@ function structuralRooms(evidence, projectId, byRoot) {
   if (evidence.workspace.kind === 'root-package') {
     return [componentRoom(projectId, ROOT_MARKER, ROOT_MARKER, [byRoot.get('.')])];
   }
-  const groups = new Map();
-  for (const root of evidence.workspace.package_roots) {
-    const segment = root.split('/')[0];
-    const values = groups.get(segment) || [];
-    values.push(byRoot.get(root));
-    groups.set(segment, values);
-  }
-  return [...groups].map(([segment, packages]) => componentRoom(
+  // B2 depth: one component room per full workspace package root (mirrors the
+  // projector's independent implementation so the gate reconstitutes the same
+  // per-package topology).
+  return evidence.workspace.package_roots.map((root) => componentRoom(
     projectId,
-    `workspace-path-group:${segment}`,
-    segment,
-    packages,
+    `workspace-package:${root}`,
+    root,
+    [byRoot.get(root)],
   )).sort(compareRooms);
 }
 
@@ -695,7 +692,7 @@ function reconstructMap(evidence, evidenceBytes) {
   if (evidence.analysis.detail_eligible) {
     const byRoot = new Map(evidence.packages.map((value) => [value.root, value]));
     rooms = structuralRooms(evidence, projectId, byRoot);
-    if (rooms.length < 1 || rooms.length > 5) reasons = ['station-fallback/room-count-out-of-range'];
+    if (rooms.length < 1 || rooms.length > MAX_STRUCTURAL_ROOMS) reasons = ['station-fallback/room-count-out-of-range'];
     else relations = structuralRelations(evidence, rooms, byRoot);
   }
   if (reasons.length) {
