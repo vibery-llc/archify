@@ -1,7 +1,7 @@
 import { parseRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import {
+  DIRECTORY_LAYOUT_PROFILE,
   MAX_STRUCTURAL_ROOMS,
-  STATION_PROFILE,
   STATION_SCHEMAS,
   validateStationEvidence,
   validateStationMap,
@@ -27,6 +27,7 @@ import {
 const ROOT_STRUCTURAL_KEY = 'root-package';
 const COARSE_STRUCTURAL_KEY = 'project-root';
 const WORKSPACE_STRUCTURAL_PREFIX = 'workspace-package:';
+const DIRECTORY_STRUCTURAL_PREFIX = 'directory:';
 
 function sortedUnique(values, comparator = compareCodePoints) {
   return [...new Set(values)].sort(comparator);
@@ -142,6 +143,22 @@ function structuralRooms(evidence, projectId, indexes) {
   }).sort(compareRooms);
 }
 
+// directory-layout/v1: one layout-confidence room per selected directory.
+// Rooms carry no relations; directory structure says nothing about
+// dependencies.
+function directoryRooms(evidence, projectId) {
+  return evidence.directories.map(({ id, root }) => ({
+    id: deriveRoomId(projectId, `${DIRECTORY_STRUCTURAL_PREFIX}${root}`),
+    project_id: projectId,
+    kind: 'component',
+    structural_key: `${DIRECTORY_STRUCTURAL_PREFIX}${root}`,
+    label: root,
+    package_roots: [root],
+    confidence: 'layout',
+    evidence_ids: [id],
+  })).sort(compareRooms);
+}
+
 function structuralRelations(evidence, rooms, indexes) {
   const roomByRoot = new Map();
   for (const room of rooms) {
@@ -212,11 +229,11 @@ function assembleMap(evidence, evidenceHash, project, rooms, relations, reasons)
   const value = {
     schema: STATION_SCHEMAS.map,
     snapshot: {
-      id: deriveSnapshotId(project.projectId, evidence.repository.revision, evidenceHash, STATION_PROFILE),
+      id: deriveSnapshotId(project.projectId, evidence.repository.revision, evidenceHash, evidence.extractor.profile),
       project_id: project.projectId,
       revision: evidence.repository.revision,
       evidence_sha256: evidenceHash,
-      profile: STATION_PROFILE,
+      profile: evidence.extractor.profile,
       mode: coarse ? 'coarse' : 'structural',
     },
     project: {
@@ -246,6 +263,17 @@ export function projectStationMap(validatedEvidence, evidenceBytes) {
       evidenceHash,
       project,
       validatedEvidence.analysis.fallback_reason_codes,
+    );
+  }
+
+  if (validatedEvidence.extractor.profile === DIRECTORY_LAYOUT_PROFILE) {
+    return assembleMap(
+      validatedEvidence,
+      evidenceHash,
+      project,
+      directoryRooms(validatedEvidence, project.projectId),
+      [],
+      [],
     );
   }
 

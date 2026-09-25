@@ -10,6 +10,11 @@ export const STATION_SCHEMAS = Object.freeze({
 });
 
 export const STATION_PROFILE = 'node-workspaces/v1';
+export const DIRECTORY_LAYOUT_PROFILE = 'directory-layout/v1';
+// Profile ladder, in the order it is attempted. STATION_PROFILE stays the
+// first rung so callers that predate the ladder keep their meaning.
+export const STATION_PROFILES = Object.freeze([STATION_PROFILE, DIRECTORY_LAYOUT_PROFILE]);
+export const PROFILE_ATTEMPT_OUTCOMES = Object.freeze(['selected', 'single-package', 'fallback']);
 export const STATION_CONTRACT_VERSION = 1;
 export const MAX_STRUCTURAL_ROOMS = 64;
 export const STATION_LIMITS = Object.freeze({
@@ -47,9 +52,44 @@ export const FALLBACK_REASON_CODES = Object.freeze([
   'station-fallback/room-count-out-of-range',
 ]);
 
+// Causes raised by the directory-layout/v1 rung of the profile ladder. Kept
+// apart from the node-workspaces/v1 causes above; artifacts accept both sets.
+export const DIRECTORY_FALLBACK_REASON_CODES = Object.freeze([
+  'station-fallback/directory-rooms-insufficient',
+  'station-fallback/directory-candidates-exceeded',
+]);
+export const STATION_FALLBACK_REASON_CODES = Object.freeze([
+  ...FALLBACK_REASON_CODES,
+  ...DIRECTORY_FALLBACK_REASON_CODES,
+]);
+
+// directory-layout/v1 inputs. A directory becomes a room candidate only when
+// its committed subtree holds at least one regular file whose extension is in
+// DIRECTORY_CODE_EXTENSIONS (compared case-insensitively).
+export const DIRECTORY_CODE_EXTENSIONS = Object.freeze([
+  'astro', 'c', 'cc', 'cjs', 'cpp', 'cs', 'gd', 'go', 'h', 'hlsl', 'hpp', 'java', 'js', 'jsx', 'kt',
+  'lua', 'mjs', 'php', 'py', 'rb', 'rs', 'sh', 'shader', 'sql', 'svelte', 'swift', 'ts', 'tsx', 'vue',
+]);
+// Directory names skipped at every depth, together with every dot-directory.
+export const DIRECTORY_EXCLUDED_NAMES = Object.freeze([
+  '.next', '.venv', 'Library', 'Logs', 'Obj', 'Packages', 'ProjectSettings', 'Temp', 'UserSettings',
+  '__pycache__', 'build', 'coverage', 'dist', 'node_modules', 'obj', 'out', 'target', 'vendor', 'venv',
+]);
+// Top-level directories that hold components rather than being one: their
+// child directories become the candidates. A conventional root with no child
+// candidate becomes a candidate itself.
+export const DIRECTORY_CONVENTIONAL_ROOTS = Object.freeze(['app', 'apps', 'cmd', 'internal', 'lib', 'packages', 'src']);
+// Unity: top-level Assets/ is never a candidate. Each direct child of Assets/
+// is a conventional root (Assets/Scripts -> Assets/Scripts/<X>), except these
+// engine-managed or third-party folders, which are skipped entirely.
+export const DIRECTORY_UNITY_ASSETS_ROOT = 'Assets';
+export const DIRECTORY_UNITY_EXCLUDED_CHILDREN = Object.freeze([
+  'Editor Default Resources', 'Plugins', 'Resources', 'StreamingAssets',
+]);
+
 export const CONTRACT_FIELDS = Object.freeze({
   evidence: Object.freeze({
-    '/': Object.freeze(['schema', 'extractor', 'repository', 'files', 'workspace', 'packages', 'analysis']),
+    '/': Object.freeze(['schema', 'extractor', 'repository', 'files', 'workspace', 'packages', 'directories', 'analysis']),
     '/extractor': Object.freeze(['profile', 'contract_version', 'limits']),
     '/extractor/limits': Object.freeze(['max_tree_bytes', 'max_manifest_count', 'max_workspace_patterns', 'max_manifest_bytes', 'max_selected_manifest_bytes']),
     '/repository': Object.freeze(['id', 'url', 'revision', 'tree_oid', 'object_format']),
@@ -57,7 +97,9 @@ export const CONTRACT_FIELDS = Object.freeze({
     '/workspace': Object.freeze(['kind', 'root_manifest_evidence_id', 'patterns', 'package_roots']),
     '/packages/items': Object.freeze(['root', 'name', 'private', 'manifest_evidence_id', 'workspace_pattern', 'declared_dependencies']),
     '/packages/items/declared_dependencies/items': Object.freeze(['name', 'scopes']),
-    '/analysis': Object.freeze(['detail_eligible', 'discovered_manifest_count', 'selected_manifest_count', 'represented_manifest_count', 'fallback_reason_codes']),
+    '/directories/items': Object.freeze(['id', 'root', 'code_file_count']),
+    '/analysis': Object.freeze(['detail_eligible', 'discovered_manifest_count', 'selected_manifest_count', 'represented_manifest_count', 'fallback_reason_codes', 'profile_attempts']),
+    '/analysis/profile_attempts/items': Object.freeze(['profile', 'outcome', 'reason_code']),
   }),
   map: Object.freeze({
     '/': Object.freeze(['schema', 'snapshot', 'project', 'rooms', 'relations', 'fallback']),
@@ -206,7 +248,7 @@ function limits(value, artifact, path) {
 
 function extractor(value, artifact, contract) {
   object(value, artifact, '/extractor', CONTRACT_FIELDS[contract]['/extractor']);
-  constant(value.profile, STATION_PROFILE, artifact, '/extractor/profile');
+  string(value.profile, artifact, '/extractor/profile', { values: STATION_PROFILES });
   constant(value.contract_version, STATION_CONTRACT_VERSION, artifact, '/extractor/contract_version');
   limits(value.limits, artifact, '/extractor/limits');
 }
@@ -214,7 +256,7 @@ function extractor(value, artifact, contract) {
 function fallbackReasons(value, artifact, path) {
   uniqueStrings(value, artifact, path);
   value.forEach((reason, index) => {
-    if (!FALLBACK_REASON_CODES.includes(reason)) invalid(artifact, `${path}/${index}`, 'approved station-fallback/v1 reason', reason);
+    if (!STATION_FALLBACK_REASON_CODES.includes(reason)) invalid(artifact, `${path}/${index}`, 'approved station-fallback/v1 reason', reason);
   });
 }
 
@@ -254,9 +296,13 @@ function validatePackage(value, artifact, index) {
 
 export function validateStationEvidence(value) {
   const artifact = STATION_SCHEMAS.evidence;
-  object(value, artifact, '/', CONTRACT_FIELDS.evidence['/']);
+  object(value, artifact, '/', CONTRACT_FIELDS.evidence['/'], CONTRACT_FIELDS.evidence['/'].filter((field) => field !== 'directories'));
   constant(value.schema, artifact, artifact, '/schema');
   extractor(value.extractor, artifact, 'evidence');
+  const directoryProfile = value.extractor.profile === DIRECTORY_LAYOUT_PROFILE;
+  if (directoryProfile !== Object.hasOwn(value, 'directories')) {
+    invalid(artifact, '/directories', directoryProfile ? 'required property for directory-layout/v1' : 'absent outside directory-layout/v1', value.directories);
+  }
 
   object(value.repository, artifact, '/repository', CONTRACT_FIELDS.evidence['/repository']);
   id(value.repository.id, 'project', artifact, '/repository/id');
@@ -278,7 +324,21 @@ export function validateStationEvidence(value) {
   array(value.packages, artifact, '/packages');
   value.packages.forEach((entry, index) => validatePackage(entry, artifact, index));
 
-  object(value.analysis, artifact, '/analysis', CONTRACT_FIELDS.evidence['/analysis']);
+  if (directoryProfile) {
+    array(value.directories, artifact, '/directories', { min: 2, max: MAX_STRUCTURAL_ROOMS });
+    value.directories.forEach((entry, index) => validateDirectory(entry, artifact, index));
+    const roots = value.directories.map(({ root }) => root);
+    if (new Set(roots).size !== roots.length) invalid(artifact, '/directories', 'unique directory roots', roots);
+    if (roots.some((root) => roots.some((other) => other.startsWith(`${root}/`)))) {
+      invalid(artifact, '/directories', 'non-overlapping directory roots', roots);
+    }
+    if (value.workspace.kind !== 'unsupported' || value.packages.length || value.files.length) {
+      invalid(artifact, '/workspace', 'no package claims in directory-layout/v1 evidence', value.workspace);
+    }
+  }
+
+  const analysisFields = CONTRACT_FIELDS.evidence['/analysis'];
+  object(value.analysis, artifact, '/analysis', analysisFields, analysisFields.filter((field) => field !== 'profile_attempts'));
   boolean(value.analysis.detail_eligible, artifact, '/analysis/detail_eligible');
   integer(value.analysis.discovered_manifest_count, artifact, '/analysis/discovered_manifest_count');
   integer(value.analysis.selected_manifest_count, artifact, '/analysis/selected_manifest_count');
@@ -286,7 +346,50 @@ export function validateStationEvidence(value) {
   fallbackReasons(value.analysis.fallback_reason_codes, artifact, '/analysis/fallback_reason_codes');
   if (value.analysis.detail_eligible && value.analysis.fallback_reason_codes.length) invalid(artifact, '/analysis/fallback_reason_codes', 'empty when detail_eligible is true', value.analysis.fallback_reason_codes);
   if (!value.analysis.detail_eligible && !value.analysis.fallback_reason_codes.length) invalid(artifact, '/analysis/fallback_reason_codes', 'one or more reasons when detail_eligible is false', value.analysis.fallback_reason_codes);
+  if (directoryProfile || Object.hasOwn(value.analysis, 'profile_attempts')) validateProfileAttempts(value, artifact, directoryProfile);
   return value;
+}
+
+function validateDirectory(value, artifact, index) {
+  const path = `/directories/${index}`;
+  object(value, artifact, path, CONTRACT_FIELDS.evidence['/directories/items']);
+  id(value.id, 'evidence', artifact, `${path}/id`);
+  repositoryPath(value.root, artifact, `${path}/root`);
+  integer(value.code_file_count, artifact, `${path}/code_file_count`, { min: 1 });
+}
+
+function validateAttempt(value, artifact, index) {
+  const path = `/analysis/profile_attempts/${index}`;
+  object(value, artifact, path, CONTRACT_FIELDS.evidence['/analysis/profile_attempts/items']);
+  string(value.profile, artifact, `${path}/profile`, { values: STATION_PROFILES });
+  string(value.outcome, artifact, `${path}/outcome`, { values: PROFILE_ATTEMPT_OUTCOMES });
+  if (value.outcome === 'fallback') {
+    string(value.reason_code, artifact, `${path}/reason_code`, { values: STATION_FALLBACK_REASON_CODES });
+  } else if (value.reason_code !== null) {
+    invalid(artifact, `${path}/reason_code`, 'null unless the outcome is fallback', value.reason_code);
+  }
+}
+
+// Attempts are recorded only when the directory profile ran and its result is
+// visible: it won, or it ran for a repository without a root manifest.
+function validateProfileAttempts(value, artifact, directoryProfile) {
+  const attempts = array(value.analysis.profile_attempts, artifact, '/analysis/profile_attempts', { min: 2, max: 2 });
+  attempts.forEach((entry, index) => validateAttempt(entry, artifact, index));
+  const [workspaces, directories] = attempts;
+  if (workspaces.profile !== STATION_PROFILE || directories.profile !== DIRECTORY_LAYOUT_PROFILE) {
+    invalid(artifact, '/analysis/profile_attempts', 'node-workspaces/v1 then directory-layout/v1', attempts);
+  }
+  const manifestMissing = workspaces.outcome === 'fallback' && workspaces.reason_code === 'station-fallback/root-manifest-missing';
+  if (!manifestMissing && workspaces.outcome !== 'single-package') {
+    invalid(artifact, '/analysis/profile_attempts/0', 'single-package or root-manifest-missing fallback', workspaces);
+  }
+  if (directoryProfile) {
+    if (directories.outcome !== 'selected' || !value.analysis.detail_eligible) {
+      invalid(artifact, '/analysis/profile_attempts/1', 'selected directory-layout/v1 attempt', directories);
+    }
+  } else if (directories.outcome !== 'fallback' || !manifestMissing || value.analysis.detail_eligible) {
+    invalid(artifact, '/analysis/profile_attempts', 'recorded only for a manifest-free fallback', attempts);
+  }
 }
 
 function validateRoom(value, artifact, index) {
@@ -299,7 +402,7 @@ function validateRoom(value, artifact, index) {
   string(value.label, artifact, `${path}/label`);
   uniqueStrings(value.package_roots, artifact, `${path}/package_roots`);
   value.package_roots.forEach((entry, rootIndex) => repositoryPath(entry, artifact, `${path}/package_roots/${rootIndex}`, { root: true }));
-  string(value.confidence, artifact, `${path}/confidence`, { values: ['high', 'coarse'] });
+  string(value.confidence, artifact, `${path}/confidence`, { values: ['high', 'coarse', 'layout'] });
   uniqueStrings(value.evidence_ids, artifact, `${path}/evidence_ids`);
   value.evidence_ids.forEach((entry, evidenceIndex) => id(entry, 'evidence', artifact, `${path}/evidence_ids/${evidenceIndex}`));
 }
@@ -330,7 +433,7 @@ export function validateStationMap(value) {
   id(value.snapshot.project_id, 'project', artifact, '/snapshot/project_id');
   oid(value.snapshot.revision, artifact, '/snapshot/revision');
   hash(value.snapshot.evidence_sha256, artifact, '/snapshot/evidence_sha256');
-  constant(value.snapshot.profile, STATION_PROFILE, artifact, '/snapshot/profile');
+  string(value.snapshot.profile, artifact, '/snapshot/profile', { values: STATION_PROFILES });
   string(value.snapshot.mode, artifact, '/snapshot/mode', { values: ['structural', 'coarse'] });
 
   object(value.project, artifact, '/project', CONTRACT_FIELDS.map['/project']);
@@ -362,11 +465,21 @@ export function validateStationMap(value) {
   } else {
     if (value.fallback.used) invalid(artifact, '/fallback/used', 'false in structural mode', value.fallback.used);
     if (value.fallback.reason_codes.length) invalid(artifact, '/fallback/reason_codes', 'empty in structural mode', value.fallback.reason_codes);
-    value.rooms.forEach((room, index) => {
-      if (room.kind !== 'component' || room.confidence !== 'high' || room.package_roots.length < 1) {
-        invalid(artifact, `/rooms/${index}`, 'high-confidence component room with package membership', room);
-      }
-    });
+    if (value.snapshot.profile === DIRECTORY_LAYOUT_PROFILE) {
+      if (value.relations.length !== 0) invalid(artifact, '/relations', 'no relations for directory-layout/v1 rooms', value.relations);
+      value.rooms.forEach((room, index) => {
+        if (room.kind !== 'component' || room.confidence !== 'layout' || room.package_roots.length !== 1
+            || room.package_roots[0] === '.' || room.label !== room.package_roots[0]) {
+          invalid(artifact, `/rooms/${index}`, 'layout-confidence component room with one directory root', room);
+        }
+      });
+    } else {
+      value.rooms.forEach((room, index) => {
+        if (room.kind !== 'component' || room.confidence !== 'high' || room.package_roots.length < 1) {
+          invalid(artifact, `/rooms/${index}`, 'high-confidence component room with package membership', room);
+        }
+      });
+    }
   }
   return value;
 }

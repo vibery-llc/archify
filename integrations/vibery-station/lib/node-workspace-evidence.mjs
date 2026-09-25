@@ -2,6 +2,7 @@ import { TextDecoder } from 'node:util';
 import { parseRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import {
   DEPENDENCY_SCOPES,
+  DIRECTORY_LAYOUT_PROFILE,
   STATION_CONTRACT_VERSION,
   STATION_LIMITS,
   STATION_PROFILE,
@@ -19,6 +20,7 @@ import {
   sha256Hex,
 } from './canonical-json.mjs';
 import { deriveEvidenceId, deriveProjectId } from './identity.mjs';
+import { selectDirectoryLayout } from './directory-layout-evidence.mjs';
 
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 const ROOT_MARKER = 'root-package';
@@ -339,7 +341,7 @@ function assertReader(reader) {
   }
 }
 
-export function buildStationEvidence(reader) {
+export function buildNodeWorkspaceEvidence(reader) {
   assertReader(reader);
   if (reader.manifestPolicy.exceeded) {
     return finish(reader, {
@@ -497,4 +499,74 @@ export function buildStationEvidence(reader) {
     reasons,
     selectedCount: selectedEntries.length,
   });
+}
+
+function encoded(value) {
+  validateStationEvidence(value);
+  return Object.freeze({ value, bytes: canonicalJsonBytes(value) });
+}
+
+function directoryLayoutEvidence(reader, directories, attempts) {
+  return encoded({
+    schema: STATION_SCHEMAS.evidence,
+    extractor: { ...extractorContract(), profile: DIRECTORY_LAYOUT_PROFILE },
+    repository: repositoryContract(reader),
+    files: [],
+    workspace: emptyWorkspace(),
+    packages: [],
+    directories,
+    analysis: {
+      detail_eligible: true,
+      discovered_manifest_count: reader.manifestPolicy.discovered,
+      selected_manifest_count: 0,
+      represented_manifest_count: 0,
+      fallback_reason_codes: [],
+      profile_attempts: attempts,
+    },
+  });
+}
+
+/**
+ * Profile ladder. node-workspaces/v1 wins whenever it finds workspace member
+ * packages or reports any fallback other than a missing root manifest. For a
+ * single root package or a manifest-free repository, directory-layout/v1 is
+ * tried next and wins with two or more directory rooms. Otherwise the
+ * node-workspaces/v1 result stands: byte-identical for a single root package,
+ * and for a manifest-free repository annotated with both attempts (plus the
+ * directory-candidates-exceeded cause when that was why the directory
+ * profile could not be used).
+ */
+export function buildStationEvidence(reader) {
+  const workspaces = buildNodeWorkspaceEvidence(reader);
+  const { analysis, workspace } = workspaces.value;
+  const singlePackage = analysis.detail_eligible && workspace.kind === 'root-package';
+  const manifestMissing = !analysis.detail_eligible
+    && analysis.fallback_reason_codes.length === 1
+    && analysis.fallback_reason_codes[0] === 'station-fallback/root-manifest-missing';
+  if (!singlePackage && !manifestMissing) return workspaces;
+
+  const workspaceAttempt = singlePackage
+    ? { profile: STATION_PROFILE, outcome: 'single-package', reason_code: null }
+    : { profile: STATION_PROFILE, outcome: 'fallback', reason_code: 'station-fallback/root-manifest-missing' };
+  const layout = selectDirectoryLayout(reader);
+  if (layout.outcome === 'selected') {
+    return directoryLayoutEvidence(reader, layout.directories, [
+      workspaceAttempt,
+      { profile: DIRECTORY_LAYOUT_PROFILE, outcome: 'selected', reason_code: null },
+    ]);
+  }
+  if (singlePackage) return workspaces;
+
+  const value = structuredClone(workspaces.value);
+  if (layout.reason === 'station-fallback/directory-candidates-exceeded') {
+    value.analysis.fallback_reason_codes = sortedUnique(
+      [...value.analysis.fallback_reason_codes, layout.reason],
+      compareFallbackCodes,
+    );
+  }
+  value.analysis.profile_attempts = [
+    workspaceAttempt,
+    { profile: DIRECTORY_LAYOUT_PROFILE, outcome: 'fallback', reason_code: layout.reason },
+  ];
+  return encoded(value);
 }

@@ -2,6 +2,12 @@ import { TextDecoder } from 'node:util';
 import { parseRepositoryRemote } from '../../../archify/renderers/shared/repository-location.mjs';
 import {
   DEPENDENCY_SCOPES,
+  DIRECTORY_CODE_EXTENSIONS,
+  DIRECTORY_CONVENTIONAL_ROOTS,
+  DIRECTORY_EXCLUDED_NAMES,
+  DIRECTORY_LAYOUT_PROFILE,
+  DIRECTORY_UNITY_ASSETS_ROOT,
+  DIRECTORY_UNITY_EXCLUDED_CHILDREN,
   MAX_STRUCTURAL_ROOMS,
   STATION_CONTRACT_VERSION,
   STATION_LIMITS,
@@ -27,6 +33,7 @@ import {
   sha256Hex,
 } from './canonical-json.mjs';
 import {
+  deriveDirectoryEvidenceId,
   deriveEvidenceId,
   deriveProjectId,
   deriveRelationId,
@@ -498,7 +505,7 @@ function packageFact(root, pattern, manifest, file) {
   };
 }
 
-function reconstructEvidence(reader) {
+function reconstructWorkspaceEvidence(reader) {
   if (reader.manifestPolicy.exceeded) {
     return evidenceResult(reader, { reasons: ['station-fallback/manifest-count-exceeded'] });
   }
@@ -626,6 +633,122 @@ function reconstructEvidence(reader) {
   return evidenceResult(reader, { files, workspace, packages, reasons, selectedCount: selected.length });
 }
 
+// directory-layout/v1, recomputed from the verified reader inventory without
+// sharing the extractor's implementation.
+const GATE_CODE_EXTENSIONS = new Set(DIRECTORY_CODE_EXTENSIONS);
+const GATE_EXCLUDED_NAMES = new Set(DIRECTORY_EXCLUDED_NAMES);
+const GATE_CONVENTIONAL_ROOTS = new Set(DIRECTORY_CONVENTIONAL_ROOTS);
+const GATE_UNITY_EXCLUDED = new Set(DIRECTORY_UNITY_EXCLUDED_CHILDREN);
+
+function gateCodeFiles(reader) {
+  const files = [];
+  for (const entry of reader.inventory) {
+    if (!regular(entry) || entry.path === null) continue;
+    const parts = entry.path.split('/');
+    const name = parts.pop();
+    if (parts.length === 0) continue;
+    const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1).toLowerCase() : '';
+    if (name.startsWith('.') && name.lastIndexOf('.') === 0) continue;
+    if (!GATE_CODE_EXTENSIONS.has(extension)) continue;
+    if (parts.some((part) => part.startsWith('.') || GATE_EXCLUDED_NAMES.has(part))) continue;
+    files.push({ path: entry.path, oid: entry.oid, parts });
+  }
+  return files;
+}
+
+function reconstructDirectoryLayout(reader) {
+  if (reader.unsupportedPaths.length) {
+    return {
+      reason: reader.unsupportedPaths.some(({ code }) => !COLLISION_CODES.has(code))
+        ? 'station-fallback/path-unsupported'
+        : 'station-fallback/path-collision',
+    };
+  }
+  const files = gateCodeFiles(reader);
+  const withCode = new Set();
+  for (const { parts } of files) {
+    for (let depth = 1; depth <= parts.length && depth <= 3; depth += 1) withCode.add(parts.slice(0, depth).join('/'));
+  }
+  const childrenOf = (directory) => [...withCode].filter((candidate) => {
+    const slash = candidate.lastIndexOf('/');
+    return (slash < 0 ? '' : candidate.slice(0, slash)) === directory;
+  }).sort(compareCodePoints);
+  const deeper = (directory) => {
+    const children = childrenOf(directory);
+    return children.length > 0 ? children : [directory];
+  };
+  const topLevel = childrenOf('');
+  const expanded = topLevel.flatMap((directory) => {
+    if (directory === DIRECTORY_UNITY_ASSETS_ROOT) {
+      return childrenOf(directory)
+        .filter((child) => !GATE_UNITY_EXCLUDED.has(child.split('/')[1]))
+        .flatMap(deeper);
+    }
+    return GATE_CONVENTIONAL_ROOTS.has(directory) ? deeper(directory) : [directory];
+  });
+  const collapsed = topLevel.flatMap((directory) => (
+    directory === DIRECTORY_UNITY_ASSETS_ROOT
+      ? childrenOf(directory).filter((child) => !GATE_UNITY_EXCLUDED.has(child.split('/')[1]))
+      : [directory]
+  ));
+  const roots = expanded.length <= MAX_STRUCTURAL_ROOMS ? expanded : collapsed;
+  if (roots.length > MAX_STRUCTURAL_ROOMS) return { reason: 'station-fallback/directory-candidates-exceeded' };
+  if (roots.length < 2) return { reason: 'station-fallback/directory-rooms-insufficient' };
+  return {
+    directories: roots.sort(compareCodePoints).map((root) => {
+      const members = files
+        .filter(({ path }) => path.startsWith(`${root}/`))
+        .map(({ path, oid }) => ({ path, oid }))
+        .sort((left, right) => compareCodePoints(left.path, right.path));
+      return { id: deriveDirectoryEvidenceId(root, members), root, code_file_count: members.length };
+    }),
+  };
+}
+
+function reconstructEvidence(reader) {
+  const workspaces = reconstructWorkspaceEvidence(reader);
+  const single = workspaces.analysis.detail_eligible && workspaces.workspace.kind === 'root-package';
+  const missing = !workspaces.analysis.detail_eligible
+    && sameJson(workspaces.analysis.fallback_reason_codes, ['station-fallback/root-manifest-missing']);
+  if (!single && !missing) return workspaces;
+  const first = {
+    profile: STATION_PROFILE,
+    outcome: single ? 'single-package' : 'fallback',
+    reason_code: single ? null : 'station-fallback/root-manifest-missing',
+  };
+  const layout = reconstructDirectoryLayout(reader);
+  if (layout.directories) {
+    return {
+      ...workspaces,
+      extractor: { ...workspaces.extractor, profile: DIRECTORY_LAYOUT_PROFILE },
+      files: [],
+      workspace: emptyWorkspace(),
+      packages: [],
+      directories: layout.directories,
+      analysis: {
+        detail_eligible: true,
+        discovered_manifest_count: reader.manifestCandidates.length,
+        selected_manifest_count: 0,
+        represented_manifest_count: 0,
+        fallback_reason_codes: [],
+        profile_attempts: [first, { profile: DIRECTORY_LAYOUT_PROFILE, outcome: 'selected', reason_code: null }],
+      },
+    };
+  }
+  if (single) return workspaces;
+  const reasons = layout.reason === 'station-fallback/directory-candidates-exceeded'
+    ? sortedUnique([...workspaces.analysis.fallback_reason_codes, layout.reason], compareFallbackCodes)
+    : workspaces.analysis.fallback_reason_codes;
+  return {
+    ...workspaces,
+    analysis: {
+      ...workspaces.analysis,
+      fallback_reason_codes: reasons,
+      profile_attempts: [first, { profile: DIRECTORY_LAYOUT_PROFILE, outcome: 'fallback', reason_code: layout.reason }],
+    },
+  };
+}
+
 function componentRoom(projectId, structuralKey, label, packages) {
   return {
     id: deriveRoomId(projectId, structuralKey),
@@ -686,10 +809,22 @@ function reconstructMap(evidence, evidenceBytes) {
   const projectId = deriveProjectId(repositoryIdentity(evidence.repository.url));
   const label = repositoryLabel(evidence.repository.url);
   const evidenceHash = sha256Hex(evidenceBytes);
+  const profile = evidence.extractor.profile;
   let reasons = evidence.analysis.fallback_reason_codes;
   let rooms;
   let relations = [];
-  if (evidence.analysis.detail_eligible) {
+  if (evidence.analysis.detail_eligible && profile === DIRECTORY_LAYOUT_PROFILE) {
+    rooms = evidence.directories.map((directory) => ({
+      id: deriveRoomId(projectId, `directory:${directory.root}`),
+      project_id: projectId,
+      kind: 'component',
+      structural_key: `directory:${directory.root}`,
+      label: directory.root,
+      package_roots: [directory.root],
+      confidence: 'layout',
+      evidence_ids: [directory.id],
+    })).sort(compareRooms);
+  } else if (evidence.analysis.detail_eligible) {
     const byRoot = new Map(evidence.packages.map((value) => [value.root, value]));
     rooms = structuralRooms(evidence, projectId, byRoot);
     if (rooms.length < 1 || rooms.length > MAX_STRUCTURAL_ROOMS) reasons = ['station-fallback/room-count-out-of-range'];
@@ -713,11 +848,11 @@ function reconstructMap(evidence, evidenceBytes) {
   return {
     schema: STATION_SCHEMAS.map,
     snapshot: {
-      id: deriveSnapshotId(projectId, evidence.repository.revision, evidenceHash, STATION_PROFILE),
+      id: deriveSnapshotId(projectId, evidence.repository.revision, evidenceHash, profile),
       project_id: projectId,
       revision: evidence.repository.revision,
       evidence_sha256: evidenceHash,
-      profile: STATION_PROFILE,
+      profile,
       mode: coarse ? 'coarse' : 'structural',
     },
     project: { id: projectId, label },
@@ -750,6 +885,18 @@ function verifyEvidenceBindings(evidence) {
   if (evidence.analysis.discovered_manifest_count < evidence.analysis.selected_manifest_count
       || evidence.analysis.represented_manifest_count !== (evidence.analysis.detail_eligible ? evidence.packages.length : 0)) {
     failure('station-gate/unsupported-claim', 'Evidence analysis counts are internally inconsistent.', STATION_SCHEMAS.evidence, '/analysis');
+  }
+  if (evidence.extractor.profile === DIRECTORY_LAYOUT_PROFILE) {
+    const roots = evidence.directories.map(({ root }) => root);
+    if (!sameJson(roots, [...roots].sort(compareCodePoints))) {
+      failure('station-gate/order-mismatch', 'Directory evidence is not in canonical root order.', STATION_SCHEMAS.evidence, '/directories');
+    }
+    if (new Set(evidence.directories.map(({ id }) => id)).size !== roots.length
+        || evidence.files.length !== 0 || evidence.packages.length !== 0
+        || evidence.analysis.selected_manifest_count !== 0 || !evidence.analysis.detail_eligible) {
+      failure('station-gate/unsupported-claim', 'Directory-layout evidence carries package claims or duplicated identities.', STATION_SCHEMAS.evidence, '/directories');
+    }
+    return evidence;
   }
   if (!evidence.analysis.detail_eligible) {
     if (evidence.workspace.kind !== 'unsupported' || evidence.packages.length !== 0) {
@@ -837,7 +984,7 @@ function mismatch(artifact, actual, expected) {
   else if (artifact === STATION_SCHEMAS.evidence) {
     if (/manifest_evidence_id|root_manifest_evidence_id|evidence_ids/.test(difference.path)) {
       code = 'station-gate/evidence-reference-missing';
-    } else if (/^\/(extractor|repository|files)(?:\/|$)/.test(difference.path)) {
+    } else if (/^\/(extractor|repository|files|directories)(?:\/|$)/.test(difference.path)) {
       code = 'station-gate/evidence-identity-mismatch';
     }
   } else if (/^\/(snapshot\/(id|project_id|revision|evidence_sha256|profile)|project\/id|rooms\/\d+\/(id|project_id)|relations\/\d+\/id)/.test(difference.path)) {
@@ -878,6 +1025,7 @@ export function gateStationArtifacts(evidenceBytes, mapBytes, readerSession) {
       object_format: expectedEvidence.repository.object_format,
     }),
     project_id: expectedEvidence.repository.id,
+    profile: expectedMap.snapshot.profile,
     snapshot_id: expectedMap.snapshot.id,
     mode: expectedMap.snapshot.mode,
     room_count: expectedMap.rooms.length,
