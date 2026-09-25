@@ -12,7 +12,7 @@
       "additionalProperties": false,
       "required": ["profile", "contract_version", "limits"],
       "properties": {
-        "profile": { "const": "node-workspaces/v1" },
+        "profile": { "enum": ["node-workspaces/v1", "directory-layout/v1"] },
         "contract_version": { "const": 1 },
         "limits": {
           "type": "object",
@@ -104,6 +104,22 @@
         }
       }
     },
+    "directories": {
+      "description": "Present exactly when extractor.profile is directory-layout/v1: one record per directory room, ordered by root.",
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "root", "code_file_count"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^evidence-[a-f0-9]{64}$" },
+          "root": { "type": "string", "minLength": 1 },
+          "code_file_count": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
     "analysis": {
       "type": "object",
       "additionalProperties": false,
@@ -134,11 +150,41 @@
               "station-fallback/manifest-count-exceeded",
               "station-fallback/selected-manifest-bytes-exceeded",
               "station-fallback/package-name-ambiguous",
-              "station-fallback/room-count-out-of-range"
+              "station-fallback/room-count-out-of-range",
+              "station-fallback/directory-rooms-insufficient",
+              "station-fallback/directory-candidates-exceeded"
             ]
+          }
+        },
+        "profile_attempts": {
+          "description": "Profile ladder record, node-workspaces/v1 then directory-layout/v1. Present when directory-layout/v1 won, or when it ran for a repository without a root package.json.",
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["profile", "outcome", "reason_code"],
+            "properties": {
+              "profile": { "enum": ["node-workspaces/v1", "directory-layout/v1"] },
+              "outcome": { "enum": ["selected", "single-package", "fallback"] },
+              "reason_code": {
+                "anyOf": [
+                  { "type": "string", "pattern": "^station-fallback/[a-z0-9]+(?:-[a-z0-9]+)*$" },
+                  { "type": "null" }
+                ]
+              }
+            }
           }
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "extractor": { "properties": { "profile": { "const": "directory-layout/v1" } } } } },
+      "then": { "required": ["directories"] },
+      "else": { "not": { "required": ["directories"] } }
+    }
+  ]
 }

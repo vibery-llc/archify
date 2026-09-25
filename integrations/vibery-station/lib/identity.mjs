@@ -5,6 +5,7 @@ const HEX_64 = /^[a-f0-9]{64}$/;
 const PROJECT_ID = /^project-[a-f0-9]{64}$/;
 const ROOM_ID = /^room-[a-f0-9]{64}$/;
 const PROFILE = 'node-workspaces/v1';
+const PROFILES = new Set([PROFILE, 'directory-layout/v1']);
 
 function text(value, name) {
   if (typeof value !== 'string' || !value) throw new TypeError(`${name} must be a non-empty string.`);
@@ -48,6 +49,21 @@ export function deriveEvidenceId(path, gitOid) {
   );
 }
 
+// A directory room's evidence ID binds its root to every code file it counts
+// (exact path and blob OID), so any committed change to that code changes it.
+export function deriveDirectoryEvidenceId(root, codeFiles) {
+  if (!Array.isArray(codeFiles) || codeFiles.length === 0) throw new TypeError('Directory evidence requires code files.');
+  const prefix = `${repositoryPath(root)}/`;
+  const parts = codeFiles.map(({ path, oid }) => {
+    if (!repositoryPath(path).startsWith(prefix)) throw new TypeError('Directory code file lies outside its root.');
+    return `${path}\0${match(oid, HEX_40, 'Git OID')}`;
+  });
+  for (let index = 1; index < parts.length; index += 1) {
+    if (!(parts[index - 1] < parts[index])) throw new TypeError('Directory code files must be unique and path-ordered.');
+  }
+  return derive('evidence', 'station-evidence/v1', 'git-directory', root, ...parts);
+}
+
 export function deriveRoomId(projectId, structuralKey) {
   return derive(
     'room',
@@ -68,7 +84,7 @@ export function deriveRelationId(fromRoomId, toRoomId) {
 }
 
 export function deriveSnapshotId(projectId, revision, evidenceSha256, profile = PROFILE) {
-  if (profile !== PROFILE) throw new TypeError(`Profile must be ${PROFILE}.`);
+  if (!PROFILES.has(profile)) throw new TypeError(`Profile must be one of ${[...PROFILES].join(', ')}.`);
   return derive(
     'snapshot',
     'station-snapshot/v1',

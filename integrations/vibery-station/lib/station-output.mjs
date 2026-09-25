@@ -155,6 +155,9 @@ function candidateFacts(candidate) {
       fail('station-output/candidate-invalid', 'Receipt does not bind the exact gated extraction result.', { field: key });
     }
   }
+  if (receipt.extractor.profile !== gated.profile || evidence.extractor.profile !== gated.profile) {
+    fail('station-output/candidate-invalid', 'Receipt does not bind the exact gated extraction profile.', { field: 'extractor' });
+  }
   if (map.snapshot.evidence_sha256 !== sha256Hex(candidate.evidenceBytes)
       || receipt.artifacts.map.sha256 !== sha256Hex(candidate.mapBytes)) {
     fail('station-output/candidate-invalid', 'Candidate hash binding is inconsistent.');

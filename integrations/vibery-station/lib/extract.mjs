@@ -1,7 +1,6 @@
 import {
   STATION_CONTRACT_VERSION,
   STATION_LIMITS,
-  STATION_PROFILE,
   STATION_SCHEMAS,
   validateStationExtractionReceipt,
 } from './contracts.mjs';
@@ -58,7 +57,7 @@ export function buildStationReceipt(gateResult) {
       object_format: gateResult.repository.object_format,
     },
     extractor: {
-      profile: STATION_PROFILE,
+      profile: gateResult.profile,
       contract_version: STATION_CONTRACT_VERSION,
       limits: { ...STATION_LIMITS },
     },

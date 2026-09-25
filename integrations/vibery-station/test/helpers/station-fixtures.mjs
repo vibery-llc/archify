@@ -254,3 +254,69 @@ export function runStationAcceptance({
   const artifacts = result.status === 0 ? readPublishedArtifacts(bundleRoot) : Object.freeze({});
   return Object.freeze({ result, bundleRoot, artifacts });
 }
+
+// Directory-layout fixtures: ordinary repositories without npm workspace
+// members. Each returns a committed fixture ready for createGitObjectReader.
+
+export function viteAppFiles() {
+  return {
+    'package.json': json({ name: 'vite-app', private: true, scripts: { dev: 'vite' } }),
+    'index.html': '<!doctype html><div id="root"></div>\n',
+    'vite.config.ts': 'export default {};\n',
+    'src/main.tsx': 'import "./components/Button";\n',
+    'src/components/Button.tsx': 'export const Button = () => null;\n',
+    'src/components/Card.tsx': 'export const Card = () => null;\n',
+    'src/lib/api.ts': 'export const api = 1;\n',
+    'src/pages/Home.tsx': 'export default function Home() { return null; }\n',
+    'public/favicon.svg': '<svg xmlns="http://www.w3.org/2000/svg"/>\n',
+    'public/robots.txt': 'User-agent: *\n',
+  };
+}
+
+export function flatPythonFiles() {
+  return {
+    'pyproject.toml': '[project]\nname = "flat"\n',
+    'README.md': '# flat python\n',
+    'app/__init__.py': '',
+    'app/main.py': 'print("hi")\n',
+    'tests/test_main.py': 'def test_ok():\n    assert True\n',
+    'scripts/deploy.sh': '#!/bin/sh\necho deploy\n',
+    'docs/index.md': '# docs\n',
+  };
+}
+
+export function unityFiles() {
+  return {
+    'Assets/Scripts/Player/PlayerController.cs': 'public class PlayerController {}\n',
+    'Assets/Scripts/Player/PlayerController.cs.meta': 'guid: 1\n',
+    'Assets/Scripts/UI/Hud.cs': 'public class Hud {}\n',
+    'Assets/Art/hero.png': Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+    'Assets/Art/hero.png.meta': 'guid: 2\n',
+    'Assets/Plugins/Vendor/Lib.cs': 'public class VendorLib {}\n',
+    'ProjectSettings/ProjectSettings.asset': 'm_Name: fixture\n',
+    'Packages/manifest.json': json({ dependencies: {} }),
+    'Library/Bee/Generated.cs': 'public class Generated {}\n',
+  };
+}
+
+export function tinySinglePackageFiles() {
+  return {
+    'package.json': '{"name":"tiny-single"}\n',
+    'index.js': 'module.exports = 1;\n',
+  };
+}
+
+export function wideDirectoryFiles({ conventionalChildren = 0, topLevel = 0, manifest = false } = {}) {
+  const files = manifest ? { 'package.json': json({ name: 'wide' }) } : { 'README.md': '# wide\n' };
+  for (let index = 0; index < conventionalChildren; index += 1) {
+    files[`src/m${String(index).padStart(3, '0')}/index.ts`] = `export const m = ${index};\n`;
+  }
+  for (let index = 0; index < topLevel; index += 1) {
+    files[`d${String(index).padStart(3, '0')}/main.go`] = 'package main\n';
+  }
+  return files;
+}
+
+export function createDirectoryFixture(files, { origin = 'git@github.com:Example/Station-Reader.git' } = {}) {
+  return createGitFixture({ origin, files });
+}

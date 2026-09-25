@@ -25,7 +25,7 @@
       "additionalProperties": false,
       "required": ["profile", "contract_version", "limits"],
       "properties": {
-        "profile": { "const": "node-workspaces/v1" },
+        "profile": { "enum": ["node-workspaces/v1", "directory-layout/v1"] },
         "contract_version": { "const": 1 },
         "limits": {
           "type": "object",
