@@ -31,8 +31,12 @@ function repositoryPath(value) {
   return value;
 }
 
-function derive(prefix, ...parts) {
+function deriveFromParts(prefix, parts) {
   return `${prefix}-${sha256Hex(Buffer.from(parts.join('\0'), 'utf8'))}`;
+}
+
+function derive(prefix, ...parts) {
+  return deriveFromParts(prefix, parts);
 }
 
 export function deriveProjectId(canonicalRepositoryIdentity) {
@@ -61,7 +65,9 @@ export function deriveDirectoryEvidenceId(root, codeFiles) {
   for (let index = 1; index < parts.length; index += 1) {
     if (!(parts[index - 1] < parts[index])) throw new TypeError('Directory code files must be unique and path-ordered.');
   }
-  return derive('evidence', 'station-evidence/v1', 'git-directory', root, ...parts);
+  // Pass the file list as one array: spreading it into arguments overflows the
+  // call stack on directories with very many files.
+  return deriveFromParts('evidence', ['station-evidence/v1', 'git-directory', root].concat(parts));
 }
 
 export function deriveRoomId(projectId, structuralKey) {

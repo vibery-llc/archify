@@ -13,7 +13,7 @@ import {
 } from '../lib/contracts.mjs';
 import { buildStationReceipt } from '../lib/extract.mjs';
 import { createGitObjectReader } from '../lib/git-object-reader.mjs';
-import { deriveRelationId, deriveRoomId } from '../lib/identity.mjs';
+import { deriveDirectoryEvidenceId, deriveRelationId, deriveRoomId } from '../lib/identity.mjs';
 import { buildStationEvidence } from '../lib/node-workspace-evidence.mjs';
 import { gateStationArtifacts, verifyStationMapFromEvidence } from '../lib/station-gate.mjs';
 import { projectStationMap } from '../lib/station-projector.mjs';
@@ -178,6 +178,28 @@ test('tiny single-package repository keeps the exact pre-ladder single root room
 test('more than 64 expanded candidates fall back to unexpanded top-level directories', () => {
   const result = extract(createDirectoryFixture(wideDirectoryFiles({ conventionalChildren: 70, topLevel: 1 })));
   assertDirectoryRooms(result, ['d000', 'src']);
+});
+
+test('collapsing over 64 Unity candidates keeps the Unity exclusions', () => {
+  const files = { 'Assets/Plugins/vendor.cs': 'public class Vendor {}\n', 'tools/a.py': 'print(1)\n' };
+  for (let index = 0; index < 65; index += 1) {
+    files[`Assets/Scripts/C${String(index).padStart(3, '0')}/a.cs`] = `public class C${index} {}\n`;
+  }
+  const result = extract(createDirectoryFixture(files));
+  assertDirectoryRooms(result, ['Assets/Scripts', 'tools']);
+  const scripts = result.evidence.value.directories.find(({ root }) => root === 'Assets/Scripts');
+  assert.equal(scripts.code_file_count, 65);
+});
+
+test('directory evidence IDs hash very large file lists without overflowing the stack', () => {
+  const oid = 'a'.repeat(40);
+  const codeFiles = Array.from({ length: 130000 }, (_, index) => ({ path: `src/a${String(index).padStart(6, '0')}.ts`, oid }));
+  const expected = `evidence-${sha256Hex(Buffer.from(
+    ['station-evidence/v1', 'git-directory', 'src', ...codeFiles.slice(0, 3).map(({ path }) => `${path}\0${oid}`)].join('\0'),
+    'utf8',
+  ))}`;
+  assert.equal(deriveDirectoryEvidenceId('src', codeFiles.slice(0, 3)), expected);
+  assert.match(deriveDirectoryEvidenceId('src', codeFiles), /^evidence-[a-f0-9]{64}$/);
 });
 
 test('more than 64 top-level candidates without a manifest are coarse with directory-candidates-exceeded', () => {

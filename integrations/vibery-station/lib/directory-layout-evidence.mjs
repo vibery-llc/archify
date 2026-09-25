@@ -82,6 +82,17 @@ function expandedCandidates(children, topLevel) {
   return candidates;
 }
 
+// When expansion yields too many rooms, fall back one level: top-level
+// directories, except that Assets still yields its non-excluded children so
+// the Unity exclusions hold.
+function collapsedCandidates(children, topLevel) {
+  return topLevel.flatMap((directory) => (
+    directory === DIRECTORY_UNITY_ASSETS_ROOT
+      ? (children.get(directory) || []).filter((child) => !UNITY_EXCLUDED.has(child.slice(directory.length + 1)))
+      : [directory]
+  ));
+}
+
 function directoryRecord(byDirectory, root) {
   const files = [...byDirectory.get(root)].sort((left, right) => compareCodePoints(left.path, right.path));
   return {
@@ -106,7 +117,7 @@ export function selectDirectoryLayout(reader) {
   const { byDirectory, children } = indexCodeDirectories(reader.inventory);
   const topLevel = children.get('') || [];
   let roots = expandedCandidates(children, topLevel);
-  if (roots.length > MAX_STRUCTURAL_ROOMS) roots = topLevel;
+  if (roots.length > MAX_STRUCTURAL_ROOMS) roots = collapsedCandidates(children, topLevel);
   if (roots.length > MAX_STRUCTURAL_ROOMS) {
     return { outcome: 'fallback', reason: 'station-fallback/directory-candidates-exceeded' };
   }

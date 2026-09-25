@@ -686,7 +686,12 @@ function reconstructDirectoryLayout(reader) {
     }
     return GATE_CONVENTIONAL_ROOTS.has(directory) ? deeper(directory) : [directory];
   });
-  const roots = expanded.length <= MAX_STRUCTURAL_ROOMS ? expanded : topLevel;
+  const collapsed = topLevel.flatMap((directory) => (
+    directory === DIRECTORY_UNITY_ASSETS_ROOT
+      ? childrenOf(directory).filter((child) => !GATE_UNITY_EXCLUDED.has(child.split('/')[1]))
+      : [directory]
+  ));
+  const roots = expanded.length <= MAX_STRUCTURAL_ROOMS ? expanded : collapsed;
   if (roots.length > MAX_STRUCTURAL_ROOMS) return { reason: 'station-fallback/directory-candidates-exceeded' };
   if (roots.length < 2) return { reason: 'station-fallback/directory-rooms-insufficient' };
   return {
