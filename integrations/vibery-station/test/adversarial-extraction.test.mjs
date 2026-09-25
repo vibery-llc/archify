@@ -316,7 +316,13 @@ test('a local promisor fixture distinguishes missing objects from lazy hydration
 
   const absentBefore = probeGitObject(fixture.root, blob, { noLazyFetch: true });
   assert.notEqual(absentBefore.status, 0, 'promised blob unexpectedly exists before the discriminating read');
-  assert.match(absentBefore.stderr.toString('utf8'), /lazy fetching disabled|could not fetch/i);
+  // Git before 2.45 reaches the promisor fetch and refuses it ("lazy fetching
+  // disabled" / "could not fetch <oid>"). From 2.45, GIT_NO_LAZY_FETCH turns
+  // off fetch_if_missing at setup, so Git never tries the promisor and reports
+  // the object as absent ("git cat-file <oid>: bad file").
+  const absentBeforeStderr = absentBefore.stderr.toString('utf8');
+  assert.ok(absentBeforeStderr.includes(blob), absentBeforeStderr);
+  assert.match(absentBeforeStderr, /lazy fetching disabled|could not fetch|: bad file/i);
 
   const { bundleRoot, before } = seedAuthority();
   assertCliHardFailure(
