@@ -99,7 +99,3 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ steps.release-kind.outputs.prerelease }}
           make_latest: ${{ steps.release-kind.outputs.make_latest }}
-      - name: Record stable notifier publication follow-up
-        if: steps.release-kind.outputs.prerelease == 'false'
-        run: |
-          echo 'After the repository Pages source is set to GitHub Actions, publish docs/skill-updates/archify/stable.json in a follow-up commit; the gated deploy job will verify this Release, its archify.zip digest, and the tagged Skill tree before exposure.' >> "$GITHUB_STEP_SUMMARY"
