@@ -62,7 +62,6 @@ test('release prevents manifest preannouncement and smokes the exact archive bef
   const smoke = workflowStep(workflow, 'Validate the exact release archive without installing dependencies');
   const freshness = workflowStep(workflow, 'Committed zip must match the build (same gate as CI)');
   const upload = workflowStep(workflow, 'Create GitHub Release with the zip attached');
-  const followUp = workflowStep(workflow, 'Record stable notifier publication follow-up');
 
   assert.ok(workflow.indexOf(tagFetch) < workflow.indexOf(tagGate), 'the real tag object must be fetched before release identity checks');
   assert.ok(workflow.indexOf(tagGate) < workflow.indexOf(publicationOrder), 'tag/version gate must precede the publication-order gate');
@@ -72,7 +71,6 @@ test('release prevents manifest preannouncement and smokes the exact archive bef
   assert.ok(workflow.indexOf(build) < workflow.indexOf(smoke), 'release smoke must follow the archive build');
   assert.ok(workflow.indexOf(smoke) < workflow.indexOf(freshness), 'release smoke must inspect the built archive before comparison');
   assert.ok(workflow.indexOf(freshness) < workflow.indexOf(upload), 'freshness must pass before release upload');
-  assert.ok(workflow.indexOf(upload) < workflow.indexOf(followUp), 'manifest follow-up must be recorded only after Release creation');
 
   assert.match(tagFetch, /git fetch --force --no-tags origin/);
   assert.match(tagFetch, /refs\/tags\/\$\{GITHUB_REF_NAME\}:refs\/tags\/\$\{GITHUB_REF_NAME\}/);
@@ -90,7 +88,6 @@ test('release prevents manifest preannouncement and smokes the exact archive bef
   assert.match(freshness, /cmp -s \/tmp\/archify-built\.zip archify\.zip/);
   assert.match(upload, /uses: softprops\/action-gh-release@v3\s/);
   assert.match(upload, /files: archify\.zip/);
-  assert.match(followUp, /docs\/skill-updates\/archify\/stable\.json/);
 });
 
 test('an exact tag fetch restores an annotated object after a SHA-only checkout', () => {
@@ -166,22 +163,12 @@ test('release docs disclose that mutable Release assets are verified only at dep
   assert.doesNotMatch(design, /即使 Release 资产后来可被替换，也不能脱离/);
 });
 
-test('GitHub Pages deploys docs only after every repository gate succeeds', () => {
+test('CI does not configure an automatic GitHub Pages deployment', () => {
   const workflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
-  const job = workflowJob(workflow, 'deploy-pages');
-  assert.match(job, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/);
-  assert.match(job, /needs: \[test, webm-artifact, zip-freshness, published-update-manifest, package-smoke\]/);
-  assert.match(job, /pages: write/);
-  assert.match(job, /id-token: write/);
-  assert.match(job, /repos\/\$\{GITHUB_REPOSITORY\}\/git\/ref\/heads\/main/);
-  assert.match(job, /current_main" == "\$GITHUB_SHA"/);
-  assert.match(job, /Skipping obsolete Pages deployment/);
-  assert.match(job, /if: steps\.deployment-head\.outputs\.current == 'true'/);
-  assert.match(job, /actions\/configure-pages@v6/);
-  // v5 delegates to upload-artifact v7 (Node 24); v4 still embeds Node 20.
-  assert.match(job, /actions\/upload-pages-artifact@v5\s/);
-  assert.match(job, /path: docs/);
-  assert.match(job, /actions\/deploy-pages@v5/);
+  assert.doesNotMatch(workflow, /^  deploy-pages:\s*$/m);
+  assert.doesNotMatch(workflow, /pages:\s*write/);
+  assert.doesNotMatch(workflow, /id-token:\s*write/);
+  assert.doesNotMatch(workflow, /actions\/(?:configure-pages|upload-pages-artifact|deploy-pages)@/);
 });
 
 test('release tags with a SemVer prerelease are marked prerelease and never become latest', () => {
